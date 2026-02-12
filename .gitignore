@@ -35,3 +35,7 @@ config.local.json
 
 # OpenClaw config (contains secrets)
 openclaw.json
+# Local Python cache (if examples/scripts are used)
+__pycache__/
+**/__pycache__/
+*.py[cod]
