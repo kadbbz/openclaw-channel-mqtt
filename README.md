@@ -1,7 +1,5 @@
-# @turquoisebay/mqtt
+# @kadbbz/mqtt-channel
 
-[![CI](https://github.com/hughmadden/openclaw-mqtt/actions/workflows/ci.yml/badge.svg)](https://github.com/hughmadden/openclaw-mqtt/actions)
-[![npm](https://img.shields.io/npm/v/@turquoisebay/mqtt)](https://www.npmjs.com/package/@turquoisebay/mqtt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 MQTT channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) — bidirectional messaging via MQTT brokers.
@@ -16,14 +14,14 @@ MQTT channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) — bid
 ## Installation
 
 ```bash
-openclaw plugins install @turquoisebay/mqtt
+openclaw plugins install @kadbbz/mqtt-channel
 ```
 
 Or manually:
 
 ```bash
-git clone https://github.com/hughmadden/openclaw-mqtt ~/.openclaw/extensions/mqtt
-cd ~/.openclaw/extensions/mqtt && npm install
+git clone https://github.com/kadbbz/openclaw-channel-mqtt ~/.openclaw/extensions/mqtt-channel
+cd ~/.openclaw/extensions/mqtt-channel && npm install
 ```
 
 ## Configuration
@@ -33,7 +31,7 @@ Add to `~/.openclaw/openclaw.json`:
 ```json5
 {
   channels: {
-    mqtt: {
+    mqtt-channel: {
       brokerUrl: "mqtt://localhost:1883",
       // Optional auth
       username: "openclaw",
@@ -44,7 +42,9 @@ Add to `~/.openclaw/openclaw.json`:
         outbound: "openclaw/outbound"  // Publish responses here
       },
       // Quality of Service (0=fire-and-forget, 1=at-least-once, 2=exactly-once)
-      qos: 1
+      qos: 1,
+      // Streaming mode
+      disableBlockStreaming: false
     }
   }
 }
@@ -60,7 +60,7 @@ openclaw gateway restart
 
 ### Sessions & correlation IDs (important)
 
-- **Sessions are keyed by `senderId`** → OpenClaw uses `mqtt:{senderId}` as the SessionKey, so memory and conversation history are grouped by sender.
+- **Sessions are keyed by `senderId`** → OpenClaw uses `{senderId}` as the SessionKey, so memory and conversation history are grouped by sender.
 - **`correlationId` is request‑level only** → if you include it in inbound JSON, it’s echoed back in the outbound reply for client-side matching. It does **not** create a new session or change memory.
 
 If you want separate conversations, use distinct `senderId`s.
@@ -118,7 +118,7 @@ npm run build
 
 ## Architecture
 
-```
+```json
 MQTT Broker (Mosquitto/EMQX)
      │
      ├─► inbound topic ──► OpenClaw Gateway ──► Agent
@@ -128,10 +128,11 @@ MQTT Broker (Mosquitto/EMQX)
 
 ## License
 
-MIT © Hugh Madden
+MIT © kadbbz
 
 ## See Also
 
+- [openclaw-mqtt](https://github.com/hughmadden/openclaw-mqtt) - Forked from this repo
 - [OpenClaw](https://github.com/openclaw/openclaw) — The AI assistant platform
 - [MQTT.js](https://github.com/mqttjs/MQTT.js) — MQTT client library
 - [Mosquitto](https://mosquitto.org/) — Popular MQTT broker

@@ -1,6 +1,6 @@
 {
-  "name": "@turquoisebay/mqtt",
-  "version": "0.1.17",
+  "name": "@kadbbz/mqtt-channel",
+  "version": "1.0.0",
   "description": "MQTT channel plugin for OpenClaw - bidirectional messaging via MQTT brokers",
   "type": "module",
   "main": "dist/index.js",
@@ -22,28 +22,28 @@
     "home-assistant",
     "mosquitto"
   ],
-  "author": "Hugh Madden",
+  "author": "Ning Wei",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hughmadden/openclaw-mqtt"
+    "url": "https://github.com/kadbbz/openclaw-channel-mqtt"
   },
   "openclaw": {
     "extensions": [
       "./dist/index.js"
     ],
     "channel": {
-      "id": "mqtt",
-      "label": "MQTT",
-      "selectionLabel": "MQTT (IoT/Home Automation)",
-      "docsPath": "/channels/mqtt",
-      "docsLabel": "mqtt",
+      "id": "mqtt-channel",
+      "label": "MQTT Channel",
+      "selectionLabel": "MQTT Channel (IoT/Home Automation)",
+      "docsPath": "/channels/mqtt-channel",
+      "docsLabel": "mqtt-channel",
       "blurb": "Bidirectional messaging via MQTT brokers (Mosquitto, EMQX, etc.)",
       "order": 80
     },
     "install": {
-      "npmSpec": "@turquoisebay/mqtt",
-      "localPath": "extensions/mqtt",
+      "npmSpec": "@kadbbz/mqtt-channel",
+      "localPath": "extensions/mqtt-channel",
       "defaultChoice": "npm"
     }
   },

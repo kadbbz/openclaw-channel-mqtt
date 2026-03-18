@@ -26,6 +26,7 @@ export function mergeWithEnv(config: Partial<MqttConfig>): MqttConfig {
       inbound: "openclaw/inbound",
       outbound: "openclaw/outbound",
     },
+    disableBlockStreaming: config.disableBlockStreaming ?? false,
     qos: config.qos ?? 1,
     tls: config.tls
       ? {

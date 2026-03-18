@@ -34,7 +34,7 @@ describe("mqttPlugin", () => {
 
   const defaultCfg = {
     channels: {
-      mqtt: {
+      "mqtt-channel": {
         brokerUrl: "mqtt://localhost:1883",
         topics: {
           inbound: "openclaw/inbound",
@@ -72,8 +72,8 @@ describe("mqttPlugin", () => {
 
   describe("meta", () => {
     it("should have correct id and label", () => {
-      expect(mqttPlugin.id).toBe("mqtt");
-      expect(mqttPlugin.meta.label).toBe("MQTT");
+      expect(mqttPlugin.id).toBe("mqtt-channel");
+      expect(mqttPlugin.meta.label).toBe("MQTT Channel");
       expect(mqttPlugin.meta.aliases).toContain("mosquitto");
     });
   });
@@ -275,7 +275,7 @@ describe("inbound message parsing", () => {
 
   const cfg = {
     channels: {
-      mqtt: {
+      "mqtt-channel": {
         brokerUrl: "mqtt://localhost:1883",
         topics: { inbound: "test/in", outbound: "test/out" },
         qos: 1 as const,

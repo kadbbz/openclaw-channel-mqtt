@@ -1,6 +1,6 @@
 {
   "channels": {
-    "mqtt": {
+    "mqtt-channel": {
       "brokerUrl": "mqtt://localhost:1883",
       "username": "your-username",
       "password": "YOUR_PASSWORD_HERE",
@@ -10,6 +10,7 @@
         "outbound": "openclaw/outbound"
       },
       "qos": 1,
+      "disableBlockStreaming": false,
       "tls": {
         "enabled": false
       }

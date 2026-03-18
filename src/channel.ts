@@ -14,13 +14,13 @@ let mqttClient: MqttClientManager | null = null;
  * Useful for IoT integration, home automation alerts, and service monitoring.
  */
 export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
-  id: "mqtt",
+  id: "mqtt-channel",
 
   meta: {
-    id: "mqtt",
-    label: "MQTT",
-    selectionLabel: "MQTT (IoT/Home Automation)",
-    docsPath: "/channels/mqtt",
+    id: "mqtt-channel",
+    label: "MQTT Channel",
+    selectionLabel: "MQTT Channel (IoT/Home Automation)",
+    docsPath: "/channels/mqtt-channel",
     blurb: "Bidirectional messaging via MQTT brokers",
     aliases: ["mosquitto"],
   },
@@ -34,11 +34,11 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
 
   config: {
     listAccountIds: (cfg: any) => {
-      return cfg.channels?.mqtt?.brokerUrl ? ["default"] : [];
+      return cfg.channels?.["mqtt-channel"]?.brokerUrl ? ["default"] : [];
     },
 
     resolveAccount: (cfg: any, accountId: any) => {
-      const mqtt = cfg.channels?.mqtt;
+      const mqtt = cfg.channels?.["mqtt-channel"];
       if (!mqtt) return { accountId: accountId ?? "default", enabled: false };
       return {
         accountId: accountId ?? "default",
@@ -56,7 +56,7 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
     deliveryMode: "direct",
 
     async sendText({ text, cfg }: { text: string; cfg: any }) {
-      const mqtt = cfg.channels?.mqtt;
+      const mqtt = cfg.channels?.["mqtt-channel"];
       if (!mqtt?.brokerUrl) {
         return { ok: false, error: "MQTT not configured" };
       }
@@ -80,7 +80,7 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
     startAccount: async (ctx: any) => {
       const { cfg, account, accountId, abortSignal, log } = ctx;
 
-      const mqtt = cfg.channels?.mqtt;
+      const mqtt = cfg.channels?.["mqtt-channel"];
       if (!mqtt?.brokerUrl) {
         log?.debug?.("MQTT channel not configured, skipping");
         return;
@@ -118,6 +118,7 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
           log,
           outboundTopic,
           qos: mqtt.qos,
+          disableBlockStreaming: mqtt.disableBlockStreaming,
         });
       });
 
@@ -159,8 +160,9 @@ async function handleInboundMessage(opts: {
   log: any;
   outboundTopic: string;
   qos: number;
+  disableBlockStreaming?: boolean;
 }) {
-  const { topic, payload, runtime, cfg, accountId, log, outboundTopic, qos } = opts;
+  const { topic, payload, runtime, cfg, accountId, log, outboundTopic, qos, disableBlockStreaming } = opts;
 
   try {
     const text = payload.toString("utf-8");
@@ -266,7 +268,7 @@ async function handleInboundMessage(opts: {
         },
       },
       replyOptions: {
-        disableBlockStreaming: true,
+        disableBlockStreaming: disableBlockStreaming ?? false,
       },
     });
 

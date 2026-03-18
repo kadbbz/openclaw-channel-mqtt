@@ -1,8 +1,8 @@
 {
-  "id": "mqtt",
-  "name": "MQTT",
+  "id": "mqtt-channel",
+  "name": "MQTT Channel",
   "description": "Bidirectional MQTT channel for IoT and home automation integration",
-  "channels": ["mqtt"],
+  "channels": ["mqtt-channel"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

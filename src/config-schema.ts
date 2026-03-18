@@ -24,6 +24,7 @@ export const mqttConfigSchema = z.object({
     })
     .default({}),
   qos: z.union([z.literal(0), z.literal(1), z.literal(2)]).default(1),
+  disableBlockStreaming: z.boolean().default(false),
   tls: z
     .object({
       enabled: z.boolean().default(false),
@@ -41,4 +42,5 @@ export const defaultConfig: Partial<MqttConfig> = {
     outbound: "openclaw/outbound",
   },
   qos: 1,
+  disableBlockStreaming: false,
 };

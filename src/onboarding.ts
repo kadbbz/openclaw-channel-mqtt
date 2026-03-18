@@ -3,15 +3,16 @@
  * Provides interactive setup via `openclaw configure channels`
  */
 
-const channel = "mqtt";
+const channel = "mqtt-channel";
 
 interface MqttConfig {
   channels?: {
-    mqtt?: {
+    "mqtt-channel"?: {
       enabled?: boolean;
       brokerUrl?: string;
       username?: string;
       password?: string;
+      disableBlockStreaming?: boolean;
       topics?: {
         inbound?: string;
         outbound?: string;
@@ -66,7 +67,7 @@ export const mqttOnboardingAdapter = {
   channel,
 
   getStatus: async ({ cfg }: { cfg: MqttConfig }): Promise<OnboardingStatus> => {
-    const mqtt = cfg.channels?.mqtt;
+    const mqtt = cfg.channels?.["mqtt-channel"];
     const configured = Boolean(mqtt?.brokerUrl && mqtt?.enabled !== false);
 
     return {
@@ -105,7 +106,7 @@ export const mqttOnboardingAdapter = {
     );
 
     // Prompt for broker URL
-    const existingUrl = cfg.channels?.mqtt?.brokerUrl;
+    const existingUrl = cfg.channels?.["mqtt-channel"]?.brokerUrl;
     const brokerUrl = String(
       await prompter.text({
         message: "MQTT broker URL",
@@ -125,7 +126,7 @@ export const mqttOnboardingAdapter = {
     const needsAuth = await prompter.confirm({
       message: "Does your broker require authentication?",
       initialValue: Boolean(
-        cfg.channels?.mqtt?.username || process.env.MQTT_USERNAME
+        cfg.channels?.["mqtt-channel"]?.username || process.env.MQTT_USERNAME
       ),
     });
 
@@ -137,7 +138,7 @@ export const mqttOnboardingAdapter = {
         await prompter.text({
           message: "MQTT username",
           initialValue:
-            cfg.channels?.mqtt?.username || process.env.MQTT_USERNAME || "",
+            cfg.channels?.["mqtt-channel"]?.username || process.env.MQTT_USERNAME || "",
           validate: (value) => (value?.trim() ? undefined : "Required"),
         })
       ).trim();
@@ -145,7 +146,7 @@ export const mqttOnboardingAdapter = {
       password = String(
         await prompter.text({
           message: "MQTT password",
-          initialValue: cfg.channels?.mqtt?.password || "",
+          initialValue: cfg.channels?.["mqtt-channel"]?.password || "",
           validate: (value) => (value?.trim() ? undefined : "Required"),
         })
       ).trim();
@@ -179,7 +180,7 @@ export const mqttOnboardingAdapter = {
       await prompter.text({
         message: "Inbound topic (messages to OpenClaw)",
         placeholder: "openclaw/inbound",
-        initialValue: cfg.channels?.mqtt?.topics?.inbound || "openclaw/inbound",
+        initialValue: cfg.channels?.["mqtt-channel"]?.topics?.inbound || "openclaw/inbound",
       })
     ).trim();
 
@@ -188,7 +189,7 @@ export const mqttOnboardingAdapter = {
         message: "Outbound topic (messages from OpenClaw)",
         placeholder: "openclaw/outbound",
         initialValue:
-          cfg.channels?.mqtt?.topics?.outbound || "openclaw/outbound",
+          cfg.channels?.["mqtt-channel"]?.topics?.outbound || "openclaw/outbound",
       })
     ).trim();
 
@@ -200,7 +201,7 @@ export const mqttOnboardingAdapter = {
         { value: 1, label: "1 - At least once", hint: "recommended" },
         { value: 2, label: "2 - Exactly once", hint: "highest overhead" },
       ],
-      initialValue: cfg.channels?.mqtt?.qos ?? 1,
+      initialValue: cfg.channels?.["mqtt-channel"]?.qos ?? 1,
     })) as 0 | 1 | 2;
 
     // Build config
@@ -208,7 +209,7 @@ export const mqttOnboardingAdapter = {
       ...next,
       channels: {
         ...next.channels,
-        mqtt: {
+        "mqtt-channel": {
           enabled: true,
           brokerUrl,
           ...(username && { username }),
@@ -230,7 +231,7 @@ export const mqttOnboardingAdapter = {
     ...cfg,
     channels: {
       ...cfg.channels,
-      mqtt: { ...cfg.channels?.mqtt, enabled: false },
+      "mqtt-channel": { ...cfg.channels?.["mqtt-channel"], enabled: false },
     },
   }),
 };
