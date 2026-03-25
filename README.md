@@ -17,37 +17,39 @@ MQTT channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) — bid
 openclaw plugins install @kadbbz/mqtt-channel
 ```
 
-Or manually:
-
-```bash
-git clone https://github.com/kadbbz/openclaw-channel-mqtt ~/.openclaw/extensions/mqtt-channel
-cd ~/.openclaw/extensions/mqtt-channel && npm install
-```
-
 ## Configuration
 
 Add to `~/.openclaw/openclaw.json`:
 
 ```json5
-{
-  channels: {
-    mqtt-channel: {
-      brokerUrl: "mqtt://localhost:1883",
-      // Optional auth
-      username: "openclaw",
-      password: "secret",
-      // Topics
-      topics: {
-        inbound: "openclaw/inbound",   // Subscribe to this
-        outbound: "openclaw/outbound"  // Publish responses here
-      },
-      // Quality of Service (0=fire-and-forget, 1=at-least-once, 2=exactly-once)
-      qos: 1,
-      // Streaming mode
-      disableBlockStreaming: false
+  "channels": {
+        "mqtt-channel": {
+                "brokerUrl": "mqtts://your_server:8883",
+                "username": "your_name",
+                "password": "your_password",
+                "topics": {
+                        "inbound": "your_channel_in",
+                        "outbound": "your_channel_out"
+                },
+                "qos": 1,
+                "disableBlockStreaming": false
+        }  
+  },
+
+```
+
+and
+
+```json5
+
+  "plugins": {
+    "entries": {
+      "mqtt-channel":{
+        "enabled" : true
+      }
     }
-  }
-}
+  },
+
 ```
 
 Then restart the gateway:
@@ -55,6 +57,8 @@ Then restart the gateway:
 ```bash
 openclaw gateway restart
 ```
+
+If " Cannot find module 'openclaw/plugin-sdk'" occurred, navigate to your OpenClaw extensions folder (often ~/.openclaw/extensions/mqtt-channel or /usr/lib/node_modules/openclaw/extensions/mqtt-channel), then run npm install inside that directory for walkround.
 
 ## Usage
 
