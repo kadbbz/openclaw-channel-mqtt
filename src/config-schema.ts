@@ -9,7 +9,8 @@ import { z } from "zod";
  *
  * Environment variables take precedence for secrets.
  */
-export const mqttConfigSchema = z.object({
+export const mqttAccountConfigSchema = z.object({
+  enabled: z.boolean().default(true),
   // Connection - env: MQTT_BROKER_URL
   brokerUrl: z.string().url().describe("MQTT broker URL"),
   // Auth - env: MQTT_USERNAME, MQTT_PASSWORD (recommended for secrets)
@@ -34,13 +35,23 @@ export const mqttConfigSchema = z.object({
     .optional(),
 });
 
-export type MqttConfig = z.infer<typeof mqttConfigSchema>;
+export const mqttChannelConfigSchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    accounts: z.record(z.string(), mqttAccountConfigSchema).default({}),
+  })
+  .passthrough();
 
-export const defaultConfig: Partial<MqttConfig> = {
+export type MqttAccountConfig = z.infer<typeof mqttAccountConfigSchema>;
+export type MqttChannelConfig = z.infer<typeof mqttChannelConfigSchema>;
+export type MqttConfig = MqttAccountConfig;
+
+export const defaultConfig: Partial<MqttAccountConfig> = {
   topics: {
     inbound: "openclaw/inbound",
     outbound: "openclaw/outbound",
   },
   qos: 1,
   disableBlockStreaming: false,
+  enabled: true,
 };

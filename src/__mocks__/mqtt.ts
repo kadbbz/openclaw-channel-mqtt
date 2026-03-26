@@ -68,24 +68,37 @@ export class MockMqttClient extends EventEmitter {
   }
 }
 
-// Factory function that returns mock client
-let mockClient: MockMqttClient | null = null;
+// Factory function that returns mock clients
+const mockClients: MockMqttClient[] = [];
 
 export function connect(url: string, opts?: unknown): MockMqttClient {
-  mockClient = new MockMqttClient();
+  const mockClient = new MockMqttClient();
+  mockClients.push(mockClient);
   // Auto-connect after short delay to simulate async connection
-  setTimeout(() => mockClient?.simulateConnect(), 10);
+  setTimeout(() => mockClient.simulateConnect(), 10);
   return mockClient;
 }
 
 // Test helper to get current mock client
-export function getMockClient(): MockMqttClient | null {
-  return mockClient;
+export function getMockClient(index?: number): MockMqttClient | null {
+  if (mockClients.length === 0) {
+    return null;
+  }
+
+  if (index === undefined) {
+    return mockClients[mockClients.length - 1];
+  }
+
+  return mockClients[index] ?? null;
+}
+
+export function getMockClients(): MockMqttClient[] {
+  return [...mockClients];
 }
 
 // Reset between tests
 export function resetMock() {
-  mockClient = null;
+  mockClients.length = 0;
 }
 
-export default { connect, getMockClient, resetMock };
+export default { connect, getMockClient, getMockClients, resetMock };

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { resetMock, getMockClient } from "./__mocks__/mqtt.js";
+import { resetMock, getMockClient, getMockClients } from "./__mocks__/mqtt.js";
 
 // Mock the mqtt module
 vi.mock("mqtt", () => import("./__mocks__/mqtt.js"));
@@ -35,12 +35,16 @@ describe("mqttPlugin", () => {
   const defaultCfg = {
     channels: {
       "mqtt-channel": {
-        brokerUrl: "mqtt://localhost:1883",
-        topics: {
-          inbound: "openclaw/inbound",
-          outbound: "openclaw/outbound",
+        accounts: {
+          default: {
+            brokerUrl: "mqtt://localhost:1883",
+            topics: {
+              inbound: "openclaw/inbound",
+              outbound: "openclaw/outbound",
+            },
+            qos: 1 as const,
+          },
         },
-        qos: 1 as const,
       },
     },
   };
@@ -97,9 +101,40 @@ describe("mqttPlugin", () => {
       expect(ids).toEqual([]);
     });
 
+    it("should list multiple configured accounts", () => {
+      const ids = mqttPlugin.config.listAccountIds({
+        channels: {
+          "mqtt-channel": {
+            accounts: {
+              admin: { brokerUrl: "mqtt://admin:1883" },
+              lowcode: { brokerUrl: "mqtt://lowcode:1883" },
+            },
+          },
+        },
+      } as any);
+
+      expect(ids).toEqual(["admin", "lowcode"]);
+    });
+
     it("should resolve account with broker URL", () => {
       const account = mqttPlugin.config.resolveAccount(defaultCfg as any, "default");
       expect(account.brokerUrl).toBe("mqtt://localhost:1883");
+    });
+
+    it("should resolve legacy single-account config as default", () => {
+      const account = mqttPlugin.config.resolveAccount(
+        {
+          channels: {
+            "mqtt-channel": {
+              brokerUrl: "mqtt://legacy:1883",
+            },
+          },
+        } as any,
+        "default"
+      );
+
+      expect(account.accountId).toBe("default");
+      expect(account.brokerUrl).toBe("mqtt://legacy:1883");
     });
   });
 
@@ -189,6 +224,45 @@ describe("mqttPlugin", () => {
       controller.abort();
       await startPromise;
     });
+
+    it("should start separate MQTT clients for separate accounts", async () => {
+      const cfg = {
+        channels: {
+          "mqtt-channel": {
+            accounts: {
+              admin: {
+                brokerUrl: "mqtt://localhost:1883",
+                topics: {
+                  inbound: "openclaw/inbound-admin",
+                  outbound: "openclaw/outbound-admin",
+                },
+                qos: 1 as const,
+              },
+              lowcode: {
+                brokerUrl: "mqtt://localhost:1884",
+                topics: {
+                  inbound: "openclaw/inbound-lowcode",
+                  outbound: "openclaw/outbound-lowcode",
+                },
+                qos: 1 as const,
+              },
+            },
+          },
+        },
+      };
+
+      const admin = await startAccount(cfg, "admin");
+      const lowcode = await startAccount(cfg, "lowcode");
+
+      const clients = getMockClients();
+      expect(clients).toHaveLength(2);
+      expect(clients[0]?.subscriptions.has("openclaw/inbound-admin")).toBe(true);
+      expect(clients[1]?.subscriptions.has("openclaw/inbound-lowcode")).toBe(true);
+
+      lowcode.controller.abort();
+      admin.controller.abort();
+      await Promise.all([lowcode.startPromise, admin.startPromise]);
+    });
   });
 
   describe("gateway.abort", () => {
@@ -211,6 +285,7 @@ describe("mqttPlugin", () => {
       const result = await mqttPlugin.outbound.sendText({
         text: "Hello from OpenClaw",
         cfg: defaultCfg as any,
+        accountId: "default",
       } as any);
 
       expect(result.ok).toBe(true);
@@ -220,6 +295,52 @@ describe("mqttPlugin", () => {
         expect.objectContaining({
           topic: "openclaw/outbound",
           message: "Hello from OpenClaw",
+        })
+      );
+
+      controller.abort();
+      await startPromise;
+    });
+
+    it("should publish using the selected account outbound topic", async () => {
+      const cfg = {
+        channels: {
+          "mqtt-channel": {
+            accounts: {
+              admin: {
+                brokerUrl: "mqtt://localhost:1883",
+                topics: {
+                  inbound: "openclaw/inbound-admin",
+                  outbound: "openclaw/outbound-admin",
+                },
+                qos: 1 as const,
+              },
+              lowcode: {
+                brokerUrl: "mqtt://localhost:1884",
+                topics: {
+                  inbound: "openclaw/inbound-lowcode",
+                  outbound: "openclaw/outbound-lowcode",
+                },
+                qos: 1 as const,
+              },
+            },
+          },
+        },
+      };
+
+      const { controller, startPromise } = await startAccount(cfg, "lowcode");
+
+      const result = await mqttPlugin.outbound.sendText({
+        text: "Hello lowcode",
+        cfg,
+        accountId: "lowcode",
+      } as any);
+
+      expect(result.ok).toBe(true);
+      expect(getMockClient()?.published).toContainEqual(
+        expect.objectContaining({
+          topic: "openclaw/outbound-lowcode",
+          message: "Hello lowcode",
         })
       );
 
@@ -276,9 +397,13 @@ describe("inbound message parsing", () => {
   const cfg = {
     channels: {
       "mqtt-channel": {
-        brokerUrl: "mqtt://localhost:1883",
-        topics: { inbound: "test/in", outbound: "test/out" },
-        qos: 1 as const,
+        accounts: {
+          default: {
+            brokerUrl: "mqtt://localhost:1883",
+            topics: { inbound: "test/in", outbound: "test/out" },
+            qos: 1 as const,
+          },
+        },
       },
     },
   };

@@ -3,9 +3,10 @@ import type { MqttCoreConfig } from "./types.js";
 import { createMqttClient, MqttClientManager } from "./client.js";
 import { mqttOnboardingAdapter } from "./onboarding.js";
 import { getMqttRuntime } from "./runtime.js";
+import { listMqttAccountIds, resolveMqttAccount } from "./channel-config.js";
 
-// Global client instance (one per gateway lifecycle)
-let mqttClient: MqttClientManager | null = null;
+// One MQTT client per configured account.
+const mqttClients = new Map<string, MqttClientManager>();
 
 /**
  * MQTT Channel Plugin for OpenClaw
@@ -34,18 +35,11 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
 
   config: {
     listAccountIds: (cfg: any) => {
-      return cfg.channels?.["mqtt-channel"]?.brokerUrl ? ["default"] : [];
+      return listMqttAccountIds(cfg);
     },
 
     resolveAccount: (cfg: any, accountId: any) => {
-      const mqtt = cfg.channels?.["mqtt-channel"];
-      if (!mqtt) return { accountId: accountId ?? "default", enabled: false };
-      return {
-        accountId: accountId ?? "default",
-        enabled: mqtt.enabled !== false,
-        brokerUrl: mqtt.brokerUrl,
-        config: mqtt,
-      };
+      return resolveMqttAccount(cfg, accountId);
     },
 
     isEnabled: (account: any) => account.enabled !== false,
@@ -55,12 +49,33 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
   outbound: {
     deliveryMode: "direct",
 
-    async sendText({ text, cfg }: { text: string; cfg: any }) {
-      const mqtt = cfg.channels?.["mqtt-channel"];
+    async sendText({
+      text,
+      cfg,
+      accountId,
+      account,
+    }: {
+      text: string;
+      cfg: any;
+      accountId?: string;
+      account?: any;
+    }) {
+      const resolved =
+        account?.config && account?.brokerUrl
+          ? {
+              accountId: accountId ?? account.accountId ?? "default",
+              enabled: account.enabled !== false,
+              brokerUrl: account.brokerUrl,
+              config: account.config,
+            }
+          : resolveMqttAccount(cfg, accountId ?? account?.accountId);
+
+      const mqtt = resolved.config;
       if (!mqtt?.brokerUrl) {
         return { ok: false, error: "MQTT not configured" };
       }
 
+      const mqttClient = mqttClients.get(resolved.accountId);
       if (!mqttClient || !mqttClient.isConnected()) {
         return { ok: false, error: "MQTT not connected" };
       }
@@ -79,24 +94,37 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
   gateway: {
     startAccount: async (ctx: any) => {
       const { cfg, account, accountId, abortSignal, log } = ctx;
-
-      const mqtt = cfg.channels?.["mqtt-channel"];
+      const resolved = account?.config ? account : resolveMqttAccount(cfg, accountId);
+      const mqtt = resolved.config;
       if (!mqtt?.brokerUrl) {
         log?.debug?.("MQTT channel not configured, skipping");
         return;
       }
+      if (resolved.enabled === false) {
+        log?.debug?.(`[${resolved.accountId}] MQTT channel disabled, skipping`);
+        return;
+      }
 
       const runtime = getMqttRuntime();
+      const resolvedAccountId = resolved.accountId ?? accountId ?? "default";
 
-      log?.info?.(`[${accountId}] starting MQTT provider (${mqtt.brokerUrl})`);
+      log?.info?.(`[${resolvedAccountId}] starting MQTT provider (${mqtt.brokerUrl})`);
+
+      const existingClient = mqttClients.get(resolvedAccountId);
+      if (existingClient) {
+        await existingClient.disconnect().catch((err) => {
+          log?.warn?.(`[${resolvedAccountId}] failed to reset MQTT client: ${err}`);
+        });
+      }
 
       // Create and connect client
-      mqttClient = createMqttClient(mqtt, {
+      const mqttClient = createMqttClient(mqtt, {
         debug: (msg: string) => log?.debug?.(`[MQTT] ${msg}`),
         info: (msg: string) => log?.info?.(`[MQTT] ${msg}`),
         warn: (msg: string) => log?.warn?.(`[MQTT] ${msg}`),
         error: (msg: string) => log?.error?.(`[MQTT] ${msg}`),
       });
+      mqttClients.set(resolvedAccountId, mqttClient);
 
       try {
         await mqttClient.connect();
@@ -114,23 +142,27 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
           payload,
           runtime,
           cfg,
-          accountId,
+          accountId: resolvedAccountId,
           log,
           outboundTopic,
           qos: mqtt.qos,
           disableBlockStreaming: mqtt.disableBlockStreaming,
+          mqttClient,
         });
       });
 
-      log?.info?.(`[${accountId}] MQTT channel ready, subscribed to ${inboundTopic}`);
+      log?.info?.(`[${resolvedAccountId}] MQTT channel ready, subscribed to ${inboundTopic}`);
 
       // Return a promise that resolves when aborted
       return new Promise<void>((resolve) => {
         const cleanup = () => {
-          if (mqttClient) {
-            log?.info?.(`[${accountId}] MQTT channel stopping`);
+          const activeClient = mqttClients.get(resolvedAccountId);
+          if (activeClient === mqttClient) {
+            log?.info?.(`[${resolvedAccountId}] MQTT channel stopping`);
             mqttClient.disconnect().finally(() => {
-              mqttClient = null;
+              if (mqttClients.get(resolvedAccountId) === mqttClient) {
+                mqttClients.delete(resolvedAccountId);
+              }
               resolve();
             });
           } else {
@@ -159,10 +191,22 @@ async function handleInboundMessage(opts: {
   accountId: string;
   log: any;
   outboundTopic: string;
-  qos: number;
+  qos?: 0 | 1 | 2;
   disableBlockStreaming?: boolean;
+  mqttClient: MqttClientManager;
 }) {
-  const { topic, payload, runtime, cfg, accountId, log, outboundTopic, qos, disableBlockStreaming } = opts;
+  const {
+    topic,
+    payload,
+    runtime,
+    cfg,
+    accountId,
+    log,
+    outboundTopic,
+    qos,
+    disableBlockStreaming,
+    mqttClient,
+  } = opts;
 
   try {
     const text = payload.toString("utf-8");
@@ -242,7 +286,7 @@ async function handleInboundMessage(opts: {
 
           log?.info?.(`MQTT reply (${info.kind}) [${payload.text.length} chars]`);
 
-          if (mqttClient?.isConnected()) {
+          if (mqttClient.isConnected()) {
             try {
               const outboundPayload = JSON.stringify({
                 senderId: "openclaw",

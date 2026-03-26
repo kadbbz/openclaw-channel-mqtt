@@ -18,6 +18,7 @@ export const ENV_VARS = {
  */
 export function mergeWithEnv(config: Partial<MqttConfig>): MqttConfig {
   return {
+    enabled: config.enabled ?? true,
     brokerUrl: process.env[ENV_VARS.BROKER_URL] ?? config.brokerUrl ?? "",
     username: process.env[ENV_VARS.USERNAME] ?? config.username,
     password: process.env[ENV_VARS.PASSWORD] ?? config.password,

@@ -1,18 +1,22 @@
 {
   "channels": {
     "mqtt-channel": {
-      "brokerUrl": "mqtt://localhost:1883",
-      "username": "your-username",
-      "password": "YOUR_PASSWORD_HERE",
-      "clientId": "openclaw-agent",
-      "topics": {
-        "inbound": "openclaw/inbound",
-        "outbound": "openclaw/outbound"
-      },
-      "qos": 1,
-      "disableBlockStreaming": false,
-      "tls": {
-        "enabled": false
+      "accounts": {
+        "default": {
+          "brokerUrl": "mqtt://localhost:1883",
+          "username": "your-username",
+          "password": "YOUR_PASSWORD_HERE",
+          "clientId": "openclaw-agent",
+          "topics": {
+            "inbound": "openclaw/inbound",
+            "outbound": "openclaw/outbound"
+          },
+          "qos": 1,
+          "disableBlockStreaming": false,
+          "tls": {
+            "enabled": false
+          }
+        }
       }
     }
   }

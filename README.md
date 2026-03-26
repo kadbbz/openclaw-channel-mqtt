@@ -22,35 +22,51 @@ openclaw plugins install @kadbbz/mqtt-channel
 Add to `~/.openclaw/openclaw.json`:
 
 ```json5
+{
   "channels": {
-        "mqtt-channel": {
-                "brokerUrl": "mqtts://your_server:8883",
-                "username": "your_name",
-                "password": "your_password",
-                "topics": {
-                        "inbound": "your_channel_in",
-                        "outbound": "your_channel_out"
-                },
-                "qos": 1,
-                "disableBlockStreaming": false
-        }  
-  },
-
-```
-
-and
-
-```json5
-
-  "plugins": {
-    "entries": {
-      "mqtt-channel":{
-        "enabled" : true
+    "mqtt-channel": {
+      "accounts": {
+        "admin": {
+          "brokerUrl": "mqtts://your_server:8883",
+          "username": "your_name",
+          "password": "your_password",
+          "topics": {
+            "inbound": "openclaw/inbound-admin",
+            "outbound": "openclaw/outbound-admin"
+          },
+          "qos": 1,
+          "disableBlockStreaming": false
+        },
+        "lowcode": {
+          "brokerUrl": "mqtts://your_server:8883",
+          "username": "your_name",
+          "password": "your_password",
+          "topics": {
+            "inbound": "openclaw/inbound-lowcode",
+            "outbound": "openclaw/outbound-lowcode"
+          },
+          "qos": 1,
+          "disableBlockStreaming": false
+        }
       }
     }
   },
-
+  "plugins": {
+    "allow": [
+      "mqtt-channel"
+    ],
+    "entries": {
+      "mqtt-channel": {
+        "enabled": true
+      }
+    }
+  },
+}
 ```
+
+Each key under `channels["mqtt-channel"].accounts` is an OpenClaw account ID. The gateway will start one MQTT client per account and route inbound/outbound topics independently.
+
+Legacy single-account config is still accepted and treated as `default`, but new setups should use `accounts`.
 
 Then restart the gateway:
 
@@ -71,20 +87,20 @@ If you want separate conversations, use distinct `senderId`s.
 
 ### Receiving messages (inbound)
 
-Messages published to your `inbound` topic will be processed by OpenClaw.
+Messages published to an account's `inbound` topic will be processed by OpenClaw.
 You can send either plain text or JSON (recommended):
 
 ```bash
-# Plain text
-mosquitto_pub -t "openclaw/inbound" -m "Alert: Service down on playground"
+# Plain text (admin account)
+mosquitto_pub -t "openclaw/inbound-admin" -m "Alert: Service down on playground"
 
-# JSON (recommended)
-mosquitto_pub -t "openclaw/inbound" -m '{"senderId":"pg-cli","text":"hello","correlationId":"abc-123"}'
+# JSON (recommended, lowcode account)
+mosquitto_pub -t "openclaw/inbound-lowcode" -m '{"senderId":"pg-cli","text":"hello","correlationId":"abc-123"}'
 ```
 
 ### Sending messages (outbound)
 
-Agent replies are published to the `outbound` topic as JSON:
+Agent replies are published to that account's `outbound` topic as JSON:
 
 ```json
 {"senderId":"openclaw","text":"...","kind":"final","ts":1700000000000}
