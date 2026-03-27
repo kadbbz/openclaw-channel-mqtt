@@ -28,7 +28,6 @@ If the plugin source is `~/.openclaw/extensions/mqtt-channel/dist/index.js`, upd
 plugin copy with:
 
 ```bash
-rm -rf ~/.openclaw/extensions/mqtt-channel 
 openclaw plugins update mqtt-channel
 ```
 
@@ -122,6 +121,12 @@ mosquitto_pub -t "openclaw/inbound-admin" -m "Alert: Service down on playground"
 mosquitto_pub -t "openclaw/inbound-lowcode" -m '{"senderId":"pg-cli","text":"hello","correlationId":"abc-123"}'
 ```
 
+Example inbound JSON:
+
+```json
+{"senderId":"conn-test2","text":"What is your agent name?","correlationId":"conn-test2"}
+```
+
 ### Sending messages (outbound)
 
 Agent replies are published to that account's `outbound` topic as JSON:
@@ -130,7 +135,7 @@ Agent replies are published to that account's `outbound` topic as JSON:
 {"senderId":"openclaw","text":"...","kind":"final","ts":1700000000000}
 ```
 
-If the inbound JSON includes `correlationId`, the same value is echoed in the outbound reply.
+If the inbound JSON includes `correlationId`, the same value is echoed in the outbound reply, including buffered or deferred replies that go through OpenClaw's generic outbound path.
 
 Example:
 
@@ -143,6 +148,19 @@ Expected reply shape:
 ```json
 {"senderId":"openclaw","text":"...","kind":"final","ts":1700000000000,"correlationId":"abc-123"}
 ```
+
+Real example reply:
+
+```json
+{"senderId":"openclaw","text":"I am **OpenClaw** — a local AI assistant running on your machine.\n\nIDENTITY.md is not filled in yet, so I do not have a customized name at the moment. Do you want to give me one, or should I just stay OpenClaw?","kind":"block","ts":1774576295258,"correlationId":"conn-test2"}
+```
+
+Notes:
+
+- `kind` may be `block` during block streaming or `final` for the final reply chunk.
+- `correlationId` is echoed only when the inbound JSON includes it.
+- Numeric inbound `correlationId` values are normalized to strings in outbound JSON.
+- `outbound.sendText()` publishes the same JSON envelope format and will also include `correlationId` when OpenClaw supplies `replyToId` or `threadId`.
 
 ## Troubleshooting
 

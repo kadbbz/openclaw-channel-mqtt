@@ -17,6 +17,31 @@ function normalizeMqttAccountId(accountId?: string | null): string {
   return trimmed || "default";
 }
 
+function normalizeCorrelationId(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const normalized =
+    typeof value === "string" ? value.trim() : String(value).trim();
+  return normalized || undefined;
+}
+
+function buildOutboundEnvelope(params: {
+  text: string;
+  kind?: string;
+  correlationId?: string;
+}): string {
+  const { text, kind = "final", correlationId } = params;
+  return JSON.stringify({
+    senderId: "openclaw",
+    text,
+    kind,
+    ts: Date.now(),
+    ...(correlationId !== undefined ? { correlationId } : {}),
+  });
+}
+
 /**
  * MQTT Channel Plugin for OpenClaw
  *
@@ -67,11 +92,15 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
       cfg,
       accountId,
       account,
+      replyToId,
+      threadId,
     }: {
       text: string;
       cfg: any;
       accountId?: string;
       account?: any;
+      replyToId?: string | null;
+      threadId?: string | number | null;
     }) {
       const resolved =
         account?.config && account?.brokerUrl
@@ -95,7 +124,14 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
 
       try {
         const topic = mqtt.topics?.outbound ?? "openclaw/outbound";
-        await mqttClient.publish(topic, text, mqtt.qos);
+        const correlationId =
+          normalizeCorrelationId(replyToId) ??
+          normalizeCorrelationId(threadId);
+        await mqttClient.publish(
+          topic,
+          buildOutboundEnvelope({ text, correlationId }),
+          mqtt.qos
+        );
         return { ok: true };
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err);
@@ -261,8 +297,8 @@ async function handleInboundMessage(opts: {
         topic.replace(/\//g, "-");
 
       correlationId =
-        (parsedPayload.correlationId as string) ??
-        (parsedPayload.requestId as string) ??
+        normalizeCorrelationId(parsedPayload.correlationId) ??
+        normalizeCorrelationId(parsedPayload.requestId) ??
         undefined;
     } else {
       messageBody = text;
@@ -297,6 +333,8 @@ async function handleInboundMessage(opts: {
       ConversationLabel: `mqtt:${senderId}`,
       SenderName: senderId,
       SenderId: senderId,
+      ReplyToId: correlationId,
+      MessageThreadId: correlationId,
       Provider: "mqtt",
       Surface: "mqtt",
       MessageSid: `mqtt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -320,6 +358,7 @@ async function handleInboundMessage(opts: {
               channel: "mqtt-channel",
               to: ctxPayload.To ?? `mqtt:${route.accountId}`,
               accountId: route.accountId,
+              threadId: correlationId,
             }
           : undefined,
         onRecordError: (err: unknown) => {
@@ -355,15 +394,18 @@ async function handleInboundMessage(opts: {
 
           if (mqttClient.isConnected()) {
             try {
-              const outboundPayload = JSON.stringify({
-                senderId: "openclaw",
+              const outboundPayload = buildOutboundEnvelope({
                 text: payload.text,
                 kind: info.kind,
-                ts: Date.now(),
-                ...(correlationId ? { correlationId } : {}),
+                correlationId,
               });
+              log?.info?.(
+                `MQTT publishing reply kind=${info.kind} correlationId=${correlationId ?? "-"} topic=${outboundTopic}`
+              );
               await mqttClient.publish(outboundTopic, outboundPayload, qos as 0 | 1 | 2);
-              log?.info?.(`MQTT: sent reply to ${outboundTopic}`);
+              log?.info?.(
+                `MQTT: sent reply to ${outboundTopic} kind=${info.kind} correlationId=${correlationId ?? "-"}`
+              );
             } catch (err) {
               log?.error?.(`MQTT: failed to send reply: ${err}`);
             }

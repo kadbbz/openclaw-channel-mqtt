@@ -243,6 +243,7 @@ describe("mqttPlugin", () => {
             channel: "mqtt-channel",
             to: "mqtt:default",
             accountId: "default",
+            threadId: undefined,
           },
         })
       );
@@ -293,6 +294,40 @@ describe("mqttPlugin", () => {
       const last = published[published.length - 1];
       const data = JSON.parse(last.message as string);
       expect(data.correlationId).toBe("corr-123");
+      const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
+      expect(lastCall?.ctx?.ReplyToId).toBe("corr-123");
+      expect(lastCall?.ctx?.MessageThreadId).toBe("corr-123");
+      expect(mockRecordInboundSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updateLastRoute: expect.objectContaining({
+            threadId: "corr-123",
+          }),
+        })
+      );
+
+      controller.abort();
+      await startPromise;
+    });
+
+    it("should stringify numeric correlationId values", async () => {
+      const { controller, startPromise } = await startAccount();
+
+      const mock = getMockClient();
+      mock?.simulateMessage(
+        "openclaw/inbound",
+        JSON.stringify({
+          message: "ping",
+          senderId: "pg-test",
+          correlationId: 1,
+        })
+      );
+      await flushAsync();
+
+      const published = mock?.published ?? [];
+      expect(published.length).toBeGreaterThan(0);
+      const last = published[published.length - 1];
+      const data = JSON.parse(last.message as string);
+      expect(data.correlationId).toBe("1");
 
       controller.abort();
       await startPromise;
@@ -400,6 +435,7 @@ describe("mqttPlugin", () => {
             channel: "mqtt-channel",
             to: "mqtt:lowcode",
             accountId: "lowcode",
+            threadId: undefined,
           },
         })
       );
@@ -435,12 +471,57 @@ describe("mqttPlugin", () => {
       expect(result.ok).toBe(true);
 
       const mock = getMockClient();
-      expect(mock?.published).toContainEqual(
-        expect.objectContaining({
-          topic: "openclaw/outbound",
-          message: "Hello from OpenClaw",
-        })
-      );
+      const published = mock?.published.find((entry) => entry.topic === "openclaw/outbound");
+      expect(published).toBeTruthy();
+      const payload = JSON.parse(String(published?.message));
+      expect(payload.senderId).toBe("openclaw");
+      expect(payload.text).toBe("Hello from OpenClaw");
+      expect(payload.kind).toBe("final");
+      expect(typeof payload.ts).toBe("number");
+
+      controller.abort();
+      await startPromise;
+    });
+
+    it("should include correlationId from replyToId in outbound envelope", async () => {
+      const { controller, startPromise } = await startAccount();
+
+      const result = await mqttPlugin.outbound.sendText({
+        text: "Hello from OpenClaw",
+        cfg: defaultCfg as any,
+        accountId: "default",
+        replyToId: "corr-123",
+      } as any);
+
+      expect(result.ok).toBe(true);
+
+      const mock = getMockClient();
+      const published = mock?.published.find((entry) => entry.topic === "openclaw/outbound");
+      expect(published).toBeTruthy();
+      const payload = JSON.parse(String(published?.message));
+      expect(payload.correlationId).toBe("corr-123");
+
+      controller.abort();
+      await startPromise;
+    });
+
+    it("should include correlationId from threadId in outbound envelope", async () => {
+      const { controller, startPromise } = await startAccount();
+
+      const result = await mqttPlugin.outbound.sendText({
+        text: "Hello from OpenClaw",
+        cfg: defaultCfg as any,
+        accountId: "default",
+        threadId: 7,
+      } as any);
+
+      expect(result.ok).toBe(true);
+
+      const mock = getMockClient();
+      const published = mock?.published.find((entry) => entry.topic === "openclaw/outbound");
+      expect(published).toBeTruthy();
+      const payload = JSON.parse(String(published?.message));
+      expect(payload.correlationId).toBe("7");
 
       controller.abort();
       await startPromise;
@@ -481,12 +562,15 @@ describe("mqttPlugin", () => {
       } as any);
 
       expect(result.ok).toBe(true);
-      expect(getMockClient()?.published).toContainEqual(
-        expect.objectContaining({
-          topic: "openclaw/outbound-lowcode",
-          message: "Hello lowcode",
-        })
+      const published = getMockClient()?.published.find(
+        (entry) => entry.topic === "openclaw/outbound-lowcode"
       );
+      expect(published).toBeTruthy();
+      const payload = JSON.parse(String(published?.message));
+      expect(payload.senderId).toBe("openclaw");
+      expect(payload.text).toBe("Hello lowcode");
+      expect(payload.kind).toBe("final");
+      expect(typeof payload.ts).toBe("number");
 
       controller.abort();
       await startPromise;

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.6] - 2026-03-27
+
+### Fixed
+- Preserve inbound `correlationId` for MQTT replies that are sent through OpenClaw's generic outbound path
+- Normalize numeric MQTT `correlationId` values to outbound JSON strings
+
+### Docs
+- Clarify inbound/outbound JSON examples and how `correlationId` is propagated
+
+## [2.0.5] - 2026-03-27
+
+### Fixed
+- Route MQTT inbound topics to the bound OpenClaw agent/account in multi-agent setups
+- Publish MQTT outbound replies as structured JSON envelopes
+
 ## [0.1.17] - 2026-02-03
 
 ### Docs
