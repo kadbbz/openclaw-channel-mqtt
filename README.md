@@ -17,6 +17,30 @@ MQTT channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) — bid
 openclaw plugins install @kadbbz/mqtt-channel
 ```
 
+If OpenClaw is already loading an untracked local copy from `~/.openclaw/extensions/mqtt-channel`,
+that local directory takes precedence over a global npm install. Check the active source with:
+
+```bash
+openclaw plugins info mqtt-channel
+```
+
+If the plugin source is `~/.openclaw/extensions/mqtt-channel/dist/index.js`, update that managed
+plugin copy with:
+
+```bash
+rm -rf ~/.openclaw/extensions/mqtt-channel 
+openclaw plugins update mqtt-channel
+```
+
+If `plugins info` shows an old untracked local copy instead of an installed plugin record:
+
+1. Move that backup or old copy out of `~/.openclaw/extensions/`.
+2. Run `openclaw plugins install @kadbbz/mqtt-channel`.
+3. Restart the gateway.
+
+Do not keep backup directories such as `mqtt-channel.bak-*` inside `~/.openclaw/extensions/`,
+or OpenClaw will detect duplicate plugin ids.
+
 ## Configuration
 
 Add to `~/.openclaw/openclaw.json`:
@@ -68,10 +92,10 @@ Each key under `channels["mqtt-channel"].accounts` is an OpenClaw account ID. Th
 
 Legacy single-account config is still accepted and treated as `default`, but new setups should use `accounts`.
 
-Then restart the gateway:
+Then restart the gateway process:
 
 ```bash
-openclaw gateway restart
+systemctl restart openclaw
 ```
 
 If " Cannot find module 'openclaw/plugin-sdk'" occurred, navigate to your OpenClaw extensions folder (often ~/.openclaw/extensions/mqtt-channel or /usr/lib/node_modules/openclaw/extensions/mqtt-channel), then run npm install inside that directory for walkround.
@@ -80,7 +104,7 @@ If " Cannot find module 'openclaw/plugin-sdk'" occurred, navigate to your OpenCl
 
 ### Sessions & correlation IDs (important)
 
-- **Sessions are keyed by `senderId`** → OpenClaw uses `{senderId}` as the SessionKey, so memory and conversation history are grouped by sender.
+- **Routing uses the MQTT account id plus the inbound `senderId`** → the plugin resolves an OpenClaw route with `peer.id = senderId`, then OpenClaw derives the final `agentId` and `sessionKey` from your `bindings` and session settings.
 - **`correlationId` is request‑level only** → if you include it in inbound JSON, it’s echoed back in the outbound reply for client-side matching. It does **not** create a new session or change memory.
 
 If you want separate conversations, use distinct `senderId`s.
@@ -106,11 +130,48 @@ Agent replies are published to that account's `outbound` topic as JSON:
 {"senderId":"openclaw","text":"...","kind":"final","ts":1700000000000}
 ```
 
-If you want to publish custom text via CLI, use the `message` tool:
+If the inbound JSON includes `correlationId`, the same value is echoed in the outbound reply.
+
+Example:
 
 ```bash
-openclaw agent --message "Send MQTT: Temperature is 23°C"
+mosquitto_sub -t "openclaw/outbound-lowcode" -v
 ```
+
+Expected reply shape:
+
+```json
+{"senderId":"openclaw","text":"...","kind":"final","ts":1700000000000,"correlationId":"abc-123"}
+```
+
+## Troubleshooting
+
+Check which plugin copy OpenClaw is actually loading:
+
+```bash
+openclaw plugins info mqtt-channel
+```
+
+Useful live logs:
+
+```bash
+journalctl -u openclaw -f | grep -E "MQTT channel ready|MQTT route resolved|Inbound MQTT message|sent reply"
+```
+
+When using multiple MQTT accounts, a healthy startup should show one subscription line per account, for example:
+
+```text
+[admin] MQTT channel ready, subscribed to openclaw/inbound-admin
+[lowcode] MQTT channel ready, subscribed to openclaw/inbound-lowcode
+```
+
+For each inbound message, the plugin also logs the resolved route:
+
+```text
+MQTT route resolved topic=openclaw/inbound-lowcode inboundAccount=lowcode routeAccount=lowcode agent=lowcode session=...
+```
+
+If that log line shows `agent=main`, the message matched your MQTT topic but OpenClaw routed it to the main agent based on current `bindings`.
 
 ## Security
 

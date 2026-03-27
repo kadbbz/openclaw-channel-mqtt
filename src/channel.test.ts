@@ -8,6 +8,11 @@ vi.mock("mqtt", () => import("./__mocks__/mqtt.js"));
 import { mqttPlugin } from "./channel.js";
 import { setMqttRuntime } from "./runtime.js";
 
+const flushAsync = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+};
+
 describe("mqttPlugin", () => {
   const mockLogger = {
     debug: vi.fn(),
@@ -22,12 +27,31 @@ describe("mqttPlugin", () => {
     }
   });
   const mockFinalizeInboundContext = vi.fn((payload: any) => payload);
+  const mockResolveStorePath = vi.fn(
+    (_store: unknown, { agentId }: { agentId?: string } = {}) => `/sessions/${agentId ?? "main"}.json`
+  );
+  const mockRecordInboundSession = vi.fn(async () => undefined);
+  const mockResolveAgentRoute = vi.fn(
+    ({ accountId, peer }: { accountId: string; peer: { id: string } }) => ({
+      agentId: accountId,
+      accountId,
+      sessionKey: `agent:${accountId}:mqtt:${peer.id}`,
+      mainSessionKey: `agent:${accountId}:main`,
+    })
+  );
 
   const mockRuntime = {
     channel: {
+      routing: {
+        resolveAgentRoute: mockResolveAgentRoute,
+      },
       reply: {
         finalizeInboundContext: mockFinalizeInboundContext,
         dispatchReplyWithBufferedBlockDispatcher: mockDispatchReply,
+      },
+      session: {
+        resolveStorePath: mockResolveStorePath,
+        recordInboundSession: mockRecordInboundSession,
       },
     },
   };
@@ -116,6 +140,36 @@ describe("mqttPlugin", () => {
       expect(ids).toEqual(["admin", "lowcode"]);
     });
 
+    it("should resolve default account ID for multi-account config", () => {
+      const accountId = mqttPlugin.config.defaultAccountId?.({
+        channels: {
+          "mqtt-channel": {
+            accounts: {
+              admin: { brokerUrl: "mqtt://admin:1883" },
+              lowcode: { brokerUrl: "mqtt://lowcode:1883" },
+            },
+          },
+        },
+      } as any);
+
+      expect(accountId).toBe("admin");
+    });
+
+    it("should prefer default account ID when present", () => {
+      const accountId = mqttPlugin.config.defaultAccountId?.({
+        channels: {
+          "mqtt-channel": {
+            accounts: {
+              lowcode: { brokerUrl: "mqtt://lowcode:1883" },
+              default: { brokerUrl: "mqtt://default:1883" },
+            },
+          },
+        },
+      } as any);
+
+      expect(accountId).toBe("default");
+    });
+
     it("should resolve account with broker URL", () => {
       const account = mqttPlugin.config.resolveAccount(defaultCfg as any, "default");
       expect(account.brokerUrl).toBe("mqtt://localhost:1883");
@@ -171,10 +225,27 @@ describe("mqttPlugin", () => {
 
       const mock = getMockClient();
       mock?.simulateMessage("openclaw/inbound", "Alert: Service down");
+      await flushAsync();
 
       expect(mockDispatchReply).toHaveBeenCalled();
       const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
       expect(lastCall?.ctx?.Body).toBe("Alert: Service down");
+      expect(lastCall?.ctx?.SessionKey).toBe("agent:default:mqtt:openclaw-inbound");
+      expect(lastCall?.ctx?.AccountId).toBe("default");
+      expect(lastCall?.ctx?.AgentId).toBe("default");
+      expect(mockResolveStorePath).toHaveBeenCalledWith(undefined, { agentId: "default" });
+      expect(mockRecordInboundSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storePath: "/sessions/default.json",
+          sessionKey: "agent:default:mqtt:openclaw-inbound",
+          updateLastRoute: {
+            sessionKey: "agent:default:main",
+            channel: "mqtt-channel",
+            to: "mqtt:default",
+            accountId: "default",
+          },
+        })
+      );
 
       controller.abort();
       await startPromise;
@@ -192,6 +263,7 @@ describe("mqttPlugin", () => {
           severity: "warning",
         })
       );
+      await flushAsync();
 
       expect(mockDispatchReply).toHaveBeenCalled();
       const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
@@ -214,6 +286,7 @@ describe("mqttPlugin", () => {
           correlationId: "corr-123",
         })
       );
+      await flushAsync();
 
       const published = mock?.published ?? [];
       expect(published.length).toBeGreaterThan(0);
@@ -262,6 +335,77 @@ describe("mqttPlugin", () => {
       lowcode.controller.abort();
       admin.controller.abort();
       await Promise.all([lowcode.startPromise, admin.startPromise]);
+    });
+
+    it("should resolve inbound route from the selected MQTT account", async () => {
+      const cfg = {
+        channels: {
+          "mqtt-channel": {
+            accounts: {
+              admin: {
+                brokerUrl: "mqtt://localhost:1883",
+                topics: {
+                  inbound: "openclaw/inbound-admin",
+                  outbound: "openclaw/outbound-admin",
+                },
+                qos: 1 as const,
+              },
+              lowcode: {
+                brokerUrl: "mqtt://localhost:1884",
+                topics: {
+                  inbound: "openclaw/inbound-lowcode",
+                  outbound: "openclaw/outbound-lowcode",
+                },
+                qos: 1 as const,
+              },
+            },
+          },
+        },
+      };
+
+      const { controller, startPromise } = await startAccount(cfg, "lowcode");
+
+      const mock = getMockClient();
+      mock?.simulateMessage(
+        "openclaw/inbound-lowcode",
+        JSON.stringify({
+          senderId: "pg-cli",
+          text: "hello",
+        })
+      );
+      await flushAsync();
+
+      expect(mockResolveAgentRoute).toHaveBeenCalledWith({
+        cfg,
+        channel: "mqtt-channel",
+        accountId: "lowcode",
+        peer: {
+          kind: "dm",
+          id: "pg-cli",
+        },
+      });
+
+      const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
+      expect(lastCall?.ctx?.SessionKey).toBe("agent:lowcode:mqtt:pg-cli");
+      expect(lastCall?.ctx?.AccountId).toBe("lowcode");
+      expect(lastCall?.ctx?.To).toBe("mqtt:lowcode");
+      expect(lastCall?.ctx?.AgentId).toBe("lowcode");
+      expect(mockResolveStorePath).toHaveBeenCalledWith(undefined, { agentId: "lowcode" });
+      expect(mockRecordInboundSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storePath: "/sessions/lowcode.json",
+          sessionKey: "agent:lowcode:mqtt:pg-cli",
+          updateLastRoute: {
+            sessionKey: "agent:lowcode:main",
+            channel: "mqtt-channel",
+            to: "mqtt:lowcode",
+            accountId: "lowcode",
+          },
+        })
+      );
+
+      controller.abort();
+      await startPromise;
     });
   });
 
@@ -384,12 +528,31 @@ describe("inbound message parsing", () => {
     }
   });
   const mockFinalizeInboundContext = vi.fn((payload: any) => payload);
+  const mockResolveStorePath = vi.fn(
+    (_store: unknown, { agentId }: { agentId?: string } = {}) => `/sessions/${agentId ?? "main"}.json`
+  );
+  const mockRecordInboundSession = vi.fn(async () => undefined);
+  const mockResolveAgentRoute = vi.fn(
+    ({ accountId, peer }: { accountId: string; peer: { id: string } }) => ({
+      agentId: accountId,
+      accountId,
+      sessionKey: `agent:${accountId}:mqtt:${peer.id}`,
+      mainSessionKey: `agent:${accountId}:main`,
+    })
+  );
 
   const mockRuntime = {
     channel: {
+      routing: {
+        resolveAgentRoute: mockResolveAgentRoute,
+      },
       reply: {
         finalizeInboundContext: mockFinalizeInboundContext,
         dispatchReplyWithBufferedBlockDispatcher: mockDispatchReply,
+      },
+      session: {
+        resolveStorePath: mockResolveStorePath,
+        recordInboundSession: mockRecordInboundSession,
       },
     },
   };
@@ -432,6 +595,7 @@ describe("inbound message parsing", () => {
     const { controller, startPromise } = await startAccount();
 
     getMockClient()?.simulateMessage("test/in", "Plain text alert");
+    await flushAsync();
 
     expect(mockDispatchReply).toHaveBeenCalled();
     const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
@@ -456,6 +620,7 @@ describe("inbound message parsing", () => {
     for (const { input, expected } of testCases) {
       mockDispatchReply.mockClear();
       getMockClient()?.simulateMessage("test/in", JSON.stringify(input));
+      await flushAsync();
 
       const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
       expect(lastCall?.ctx?.Body).toBe(expected);
@@ -478,6 +643,7 @@ describe("inbound message parsing", () => {
     for (const { input, expectedSender } of testCases) {
       mockDispatchReply.mockClear();
       getMockClient()?.simulateMessage("test/in", JSON.stringify(input));
+      await flushAsync();
 
       const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
       expect(lastCall?.ctx?.SenderId).toBe(expectedSender);

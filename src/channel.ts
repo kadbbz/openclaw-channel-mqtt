@@ -3,10 +3,19 @@ import type { MqttCoreConfig } from "./types.js";
 import { createMqttClient, MqttClientManager } from "./client.js";
 import { mqttOnboardingAdapter } from "./onboarding.js";
 import { getMqttRuntime } from "./runtime.js";
-import { listMqttAccountIds, resolveMqttAccount } from "./channel-config.js";
+import {
+  listMqttAccountIds,
+  resolveDefaultMqttAccountId,
+  resolveMqttAccount,
+} from "./channel-config.js";
 
 // One MQTT client per configured account.
 const mqttClients = new Map<string, MqttClientManager>();
+
+function normalizeMqttAccountId(accountId?: string | null): string {
+  const trimmed = accountId?.trim() ?? "";
+  return trimmed || "default";
+}
 
 /**
  * MQTT Channel Plugin for OpenClaw
@@ -40,6 +49,10 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
 
     resolveAccount: (cfg: any, accountId: any) => {
       return resolveMqttAccount(cfg, accountId);
+    },
+
+    defaultAccountId: (cfg: any) => {
+      return resolveDefaultMqttAccountId(cfg);
     },
 
     isEnabled: (account: any) => account.enabled !== false,
@@ -178,6 +191,11 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
   },
 
   onboarding: mqttOnboardingAdapter,
+
+  setup: {
+    resolveAccountId: ({ accountId }: { accountId?: string | null }) =>
+      normalizeMqttAccountId(accountId),
+  },
 };
 
 /**
@@ -251,6 +269,19 @@ async function handleInboundMessage(opts: {
       senderId = topic.replace(/\//g, "-");
     }
 
+    const route = runtime.channel.routing.resolveAgentRoute({
+      cfg,
+      channel: "mqtt-channel",
+      accountId,
+      peer: {
+        kind: "dm",
+        id: senderId,
+      },
+    });
+    log?.info?.(
+      `MQTT route resolved topic=${topic} inboundAccount=${accountId} routeAccount=${route.accountId} agent=${route.agentId} session=${route.sessionKey}`
+    );
+
     // Build the inbound context using OpenClaw's standard format
     const ctxPayload = runtime.channel.reply.finalizeInboundContext({
       Body: messageBody,
@@ -258,9 +289,10 @@ async function handleInboundMessage(opts: {
       CommandBody: messageBody,
       CommandAuthorized: true,
       From: `mqtt:${senderId}`,
-      To: `mqtt:${accountId}`,
-      SessionKey: `agent:main:mqtt:${senderId}`,
-      AccountId: accountId,
+      To: `mqtt:${route.accountId}`,
+      SessionKey: route.sessionKey,
+      AccountId: route.accountId,
+      AgentId: route.agentId,
       ChatType: "direct",
       ConversationLabel: `mqtt:${senderId}`,
       SenderName: senderId,
@@ -269,7 +301,42 @@ async function handleInboundMessage(opts: {
       Surface: "mqtt",
       MessageSid: `mqtt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       Timestamp: Date.now(),
+      OriginatingChannel: "mqtt-channel",
+      OriginatingTo: `mqtt:${route.accountId}`,
     });
+
+    const storePath = runtime.channel.session?.resolveStorePath?.(cfg.session?.store, {
+      agentId: route.agentId,
+    });
+
+    if (storePath && runtime.channel.session?.recordInboundSession) {
+      await runtime.channel.session.recordInboundSession({
+        storePath,
+        sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+        ctx: ctxPayload,
+        updateLastRoute: route.mainSessionKey
+          ? {
+              sessionKey: route.mainSessionKey,
+              channel: "mqtt-channel",
+              to: ctxPayload.To ?? `mqtt:${route.accountId}`,
+              accountId: route.accountId,
+            }
+          : undefined,
+        onRecordError: (err: unknown) => {
+          log?.error?.(`MQTT: failed updating session meta: ${String(err)}`);
+        },
+      });
+    } else if (storePath && runtime.channel.session?.recordSessionMetaFromInbound) {
+      void runtime.channel.session
+        .recordSessionMetaFromInbound({
+          storePath,
+          sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+          ctx: ctxPayload,
+        })
+        .catch((err: unknown) => {
+          log?.error?.(`MQTT: failed updating session meta: ${String(err)}`);
+        });
+    }
 
     // inbound context logging removed
 

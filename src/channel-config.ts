@@ -36,11 +36,7 @@ export function listMqttAccountIds(cfg: any): string[] {
 
 export function resolveMqttAccount(cfg: any, requestedAccountId?: string): ResolvedMqttAccount {
   const accounts = getMqttAccounts(cfg);
-  const fallbackAccountId =
-    requestedAccountId ??
-    (Object.prototype.hasOwnProperty.call(accounts, "default")
-      ? "default"
-      : Object.keys(accounts)[0] ?? "default");
+  const fallbackAccountId = requestedAccountId ?? resolveDefaultMqttAccountId(cfg);
   const accountConfig = accounts[fallbackAccountId];
   const channelConfig = getRawMqttChannelConfig(cfg);
   const channelEnabled = channelConfig?.enabled !== false;
@@ -58,6 +54,13 @@ export function resolveMqttAccount(cfg: any, requestedAccountId?: string): Resol
     brokerUrl: accountConfig.brokerUrl,
     config: accountConfig,
   };
+}
+
+export function resolveDefaultMqttAccountId(cfg: any): string {
+  const accounts = getMqttAccounts(cfg);
+  return Object.prototype.hasOwnProperty.call(accounts, "default")
+    ? "default"
+    : Object.keys(accounts)[0] ?? "default";
 }
 
 export function getMqttAccounts(cfg: any): Record<string, Partial<MqttAccountConfig>> {
