@@ -252,16 +252,16 @@ describe("mqttPlugin", () => {
       await startPromise;
     });
 
-    it("should parse JSON messages", async () => {
+    it("should parse senderId, text, and sessionId from JSON", async () => {
       const { controller, startPromise } = await startAccount();
 
       const mock = getMockClient();
       mock?.simulateMessage(
         "openclaw/inbound",
         JSON.stringify({
-          message: "Server CPU high",
-          source: "uptime-kuma",
-          severity: "warning",
+          text: "Server CPU high",
+          senderId: "uptime-kuma",
+          sessionId: "sess-123",
         })
       );
       await flushAsync();
@@ -270,21 +270,23 @@ describe("mqttPlugin", () => {
       const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
       expect(lastCall?.ctx?.Body).toBe("Server CPU high");
       expect(lastCall?.ctx?.SenderId).toBe("uptime-kuma");
+      expect(lastCall?.ctx?.ReplyToId).toBeUndefined();
+      expect(lastCall?.ctx?.MessageThreadId).toBe("sess-123");
 
       controller.abort();
       await startPromise;
     });
 
-    it("should echo correlationId in outbound replies", async () => {
+    it("should echo sessionId in outbound replies", async () => {
       const { controller, startPromise } = await startAccount();
 
       const mock = getMockClient();
       mock?.simulateMessage(
         "openclaw/inbound",
         JSON.stringify({
-          message: "ping",
+          text: "ping",
           senderId: "pg-test",
-          correlationId: "corr-123",
+          sessionId: "sess-123",
         })
       );
       await flushAsync();
@@ -293,14 +295,14 @@ describe("mqttPlugin", () => {
       expect(published.length).toBeGreaterThan(0);
       const last = published[published.length - 1];
       const data = JSON.parse(last.message as string);
-      expect(data.correlationId).toBe("corr-123");
+      expect(data.sessionId).toBe("sess-123");
       const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
-      expect(lastCall?.ctx?.ReplyToId).toBe("corr-123");
-      expect(lastCall?.ctx?.MessageThreadId).toBe("corr-123");
+      expect(lastCall?.ctx?.ReplyToId).toBeUndefined();
+      expect(lastCall?.ctx?.MessageThreadId).toBe("sess-123");
       expect(mockRecordInboundSession).toHaveBeenCalledWith(
         expect.objectContaining({
           updateLastRoute: expect.objectContaining({
-            threadId: "corr-123",
+            threadId: "sess-123",
           }),
         })
       );
@@ -309,16 +311,16 @@ describe("mqttPlugin", () => {
       await startPromise;
     });
 
-    it("should stringify numeric correlationId values", async () => {
+    it("should stringify numeric sessionId values", async () => {
       const { controller, startPromise } = await startAccount();
 
       const mock = getMockClient();
       mock?.simulateMessage(
         "openclaw/inbound",
         JSON.stringify({
-          message: "ping",
+          text: "ping",
           senderId: "pg-test",
-          correlationId: 1,
+          sessionId: 1,
         })
       );
       await flushAsync();
@@ -327,7 +329,30 @@ describe("mqttPlugin", () => {
       expect(published.length).toBeGreaterThan(0);
       const last = published[published.length - 1];
       const data = JSON.parse(last.message as string);
-      expect(data.correlationId).toBe("1");
+      expect(data.sessionId).toBe("1");
+
+      controller.abort();
+      await startPromise;
+    });
+
+    it("should return default sessionId when inbound JSON omits it", async () => {
+      const { controller, startPromise } = await startAccount();
+
+      const mock = getMockClient();
+      mock?.simulateMessage(
+        "openclaw/inbound",
+        JSON.stringify({
+          text: "ping",
+          senderId: "pg-test",
+        })
+      );
+      await flushAsync();
+
+      const published = mock?.published ?? [];
+      expect(published.length).toBeGreaterThan(0);
+      const last = published[published.length - 1];
+      const data = JSON.parse(last.message as string);
+      expect(data.sessionId).toBe("-1");
 
       controller.abort();
       await startPromise;
@@ -483,7 +508,7 @@ describe("mqttPlugin", () => {
       await startPromise;
     });
 
-    it("should include correlationId from replyToId in outbound envelope", async () => {
+    it("should return default sessionId when threadId is absent", async () => {
       const { controller, startPromise } = await startAccount();
 
       const result = await mqttPlugin.outbound.sendText({
@@ -499,13 +524,13 @@ describe("mqttPlugin", () => {
       const published = mock?.published.find((entry) => entry.topic === "openclaw/outbound");
       expect(published).toBeTruthy();
       const payload = JSON.parse(String(published?.message));
-      expect(payload.correlationId).toBe("corr-123");
+      expect(payload.sessionId).toBe("-1");
 
       controller.abort();
       await startPromise;
     });
 
-    it("should include correlationId from threadId in outbound envelope", async () => {
+    it("should include sessionId from threadId in outbound envelope", async () => {
       const { controller, startPromise } = await startAccount();
 
       const result = await mqttPlugin.outbound.sendText({
@@ -521,7 +546,7 @@ describe("mqttPlugin", () => {
       const published = mock?.published.find((entry) => entry.topic === "openclaw/outbound");
       expect(published).toBeTruthy();
       const payload = JSON.parse(String(published?.message));
-      expect(payload.correlationId).toBe("7");
+      expect(payload.sessionId).toBe("7");
 
       controller.abort();
       await startPromise;
@@ -690,48 +715,35 @@ describe("inbound message parsing", () => {
     await startPromise;
   });
 
-  it("should extract message from various JSON formats", async () => {
+  it("should use text from JSON payload", async () => {
     const { controller, startPromise } = await startAccount();
 
-    const testCases = [
-      { input: { message: "msg1" }, expected: "msg1" },
-      { input: { text: "msg2" }, expected: "msg2" },
-      { input: { msg: "msg3" }, expected: "msg3" },
-      { input: { alert: "msg4" }, expected: "msg4" },
-      { input: { body: "msg5" }, expected: "msg5" },
-    ];
+    getMockClient()?.simulateMessage(
+      "test/in",
+      JSON.stringify({ text: "msg2", senderId: "src1", sessionId: "s-1" })
+    );
+    await flushAsync();
 
-    for (const { input, expected } of testCases) {
-      mockDispatchReply.mockClear();
-      getMockClient()?.simulateMessage("test/in", JSON.stringify(input));
-      await flushAsync();
-
-      const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
-      expect(lastCall?.ctx?.Body).toBe(expected);
-    }
+    const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
+    expect(lastCall?.ctx?.Body).toBe("msg2");
+    expect(lastCall?.ctx?.MessageThreadId).toBe("s-1");
 
     controller.abort();
     await startPromise;
   });
 
-  it("should extract sender from JSON", async () => {
+  it("should extract senderId from JSON", async () => {
     const { controller, startPromise } = await startAccount();
 
-    const testCases = [
-      { input: { message: "x", source: "src1" }, expectedSender: "src1" },
-      { input: { message: "x", sender: "src2" }, expectedSender: "src2" },
-      { input: { message: "x", from: "src3" }, expectedSender: "src3" },
-      { input: { message: "x", service: "src4" }, expectedSender: "src4" },
-    ];
+    getMockClient()?.simulateMessage(
+      "test/in",
+      JSON.stringify({ text: "x", senderId: "src1" })
+    );
+    await flushAsync();
 
-    for (const { input, expectedSender } of testCases) {
-      mockDispatchReply.mockClear();
-      getMockClient()?.simulateMessage("test/in", JSON.stringify(input));
-      await flushAsync();
-
-      const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
-      expect(lastCall?.ctx?.SenderId).toBe(expectedSender);
-    }
+    const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
+    expect(lastCall?.ctx?.SenderId).toBe("src1");
+    expect(lastCall?.ctx?.ReplyToId).toBeUndefined();
 
     controller.abort();
     await startPromise;

@@ -101,10 +101,10 @@ If " Cannot find module 'openclaw/plugin-sdk'" occurred, navigate to your OpenCl
 
 ## Usage
 
-### Sessions & correlation IDs (important)
+### Sessions IDs (important)
 
 - **Routing uses the MQTT account id plus the inbound `senderId`** → the plugin resolves an OpenClaw route with `peer.id = senderId`, then OpenClaw derives the final `agentId` and `sessionKey` from your `bindings` and session settings.
-- **`correlationId` is request‑level only** → if you include it in inbound JSON, it’s echoed back in the outbound reply for client-side matching. It does **not** create a new session or change memory.
+- **`sessionId` is request‑level only** → if you include it in inbound JSON, it’s echoed back in the outbound reply for client-side matching. It does **not** create a new session or change memory.
 
 If you want separate conversations, use distinct `senderId`s.
 
@@ -118,13 +118,13 @@ You can send either plain text or JSON (recommended):
 mosquitto_pub -t "openclaw/inbound-admin" -m "Alert: Service down on playground"
 
 # JSON (recommended, lowcode account)
-mosquitto_pub -t "openclaw/inbound-lowcode" -m '{"senderId":"pg-cli","text":"hello","correlationId":"abc-123"}'
+mosquitto_pub -t "openclaw/inbound-lowcode" -m '{"senderId":"pg-cli","text":"hello","sessionId":"abc-123"}'
 ```
 
 Example inbound JSON:
 
 ```json
-{"senderId":"conn-test2","text":"What is your agent name?","correlationId":"conn-test2"}
+{"senderId":"conn-test2","text":"What is your agent name?","sessionId":"conn-test2"}
 ```
 
 ### Sending messages (outbound)
@@ -132,10 +132,10 @@ Example inbound JSON:
 Agent replies are published to that account's `outbound` topic as JSON:
 
 ```json
-{"senderId":"openclaw","text":"...","kind":"final","ts":1700000000000}
+{"senderId":"openclaw","text":"...","kind":"final","sessionId":"conn-test2","ts":1700000000000}
 ```
 
-If the inbound JSON includes `correlationId`, the same value is echoed in the outbound reply, including buffered or deferred replies that go through OpenClaw's generic outbound path.
+If the inbound JSON includes `sessionId`, the same value is echoed in the outbound reply, including buffered or deferred replies that go through OpenClaw's generic outbound path.
 
 Example:
 
@@ -146,21 +146,21 @@ mosquitto_sub -t "openclaw/outbound-lowcode" -v
 Expected reply shape:
 
 ```json
-{"senderId":"openclaw","text":"...","kind":"final","ts":1700000000000,"correlationId":"abc-123"}
+{"senderId":"openclaw","text":"...","kind":"final","ts":1700000000000,"sessionId":"abc-123"}
 ```
 
 Real example reply:
 
 ```json
-{"senderId":"openclaw","text":"I am **OpenClaw** — a local AI assistant running on your machine.\n\nIDENTITY.md is not filled in yet, so I do not have a customized name at the moment. Do you want to give me one, or should I just stay OpenClaw?","kind":"block","ts":1774576295258,"correlationId":"conn-test2"}
+{"senderId":"openclaw","text":"I am **OpenClaw** — a local AI assistant running on your machine.\n\nIDENTITY.md is not filled in yet, so I do not have a customized name at the moment. Do you want to give me one, or should I just stay OpenClaw?","kind":"block","ts":1774576295258,"sessionId":"conn-test2"}
 ```
 
 Notes:
 
 - `kind` may be `block` during block streaming or `final` for the final reply chunk.
-- `correlationId` is echoed only when the inbound JSON includes it.
-- Numeric inbound `correlationId` values are normalized to strings in outbound JSON.
-- `outbound.sendText()` publishes the same JSON envelope format and will also include `correlationId` when OpenClaw supplies `replyToId` or `threadId`.
+- `sessionId` is echoed only when the inbound JSON includes it.
+- Numeric inbound `sessionId` values are normalized to strings in outbound JSON.
+- `outbound.sendText()` publishes the same JSON envelope format and will also include `sessionId` when OpenClaw supplies `threadId` otherwise return -1.
 
 ## Troubleshooting
 
