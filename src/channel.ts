@@ -28,6 +28,10 @@ function normalizeSessionId(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
+function normalizeDisableBlockStreaming(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function buildOutboundEnvelope(params: {
   text: string;
   kind?: string;
@@ -275,6 +279,7 @@ async function handleInboundMessage(opts: {
     let messageBody: string;
     let senderId: string;
     let sessionId: string | undefined;
+    let messageDisableBlockStreaming: boolean | undefined;
 
     if (parsedPayload && typeof parsedPayload === "object") {
       messageBody = (parsedPayload.text as string) ?? text;
@@ -282,10 +287,16 @@ async function handleInboundMessage(opts: {
       senderId = (parsedPayload.senderId as string) ?? topic.replace(/\//g, "-");
 
       sessionId = normalizeSessionId(parsedPayload.sessionId) ?? undefined;
+      messageDisableBlockStreaming = normalizeDisableBlockStreaming(
+        parsedPayload.disableBlockStreaming
+      );
     } else {
       messageBody = text;
       senderId = topic.replace(/\//g, "-");
     }
+
+    const resolvedDisableBlockStreaming =
+      messageDisableBlockStreaming ?? disableBlockStreaming ?? false;
 
     const route = runtime.channel.routing.resolveAgentRoute({
       cfg,
@@ -366,18 +377,21 @@ async function handleInboundMessage(opts: {
       cfg,
       dispatcherOptions: {
         deliver: async (payload: { text?: string; media?: any }, info: { kind: string }) => {
-          if (!payload.text) {
+          const replyText = typeof payload.text === "string" ? payload.text : "";
+          const shouldForwardEmptyFinal = info.kind === "final";
+
+          if (!replyText && !shouldForwardEmptyFinal) {
             log?.debug?.(`MQTT: skipping empty ${info.kind} reply`);
             return;
           }
 
-          log?.info?.(`MQTT reply (${info.kind}) [${payload.text.length} chars]`);
+          log?.info?.(`MQTT reply (${info.kind}) [${replyText.length} chars]`);
 
           if (mqttClient.isConnected()) {
             try {
               const outboundSessionId = sessionId ?? DEFAULT_SESSION_ID;
               const outboundPayload = buildOutboundEnvelope({
-                text: payload.text,
+                text: replyText,
                 kind: info.kind,
                 sessionId: outboundSessionId,
               });
@@ -403,7 +417,7 @@ async function handleInboundMessage(opts: {
         },
       },
       replyOptions: {
-        disableBlockStreaming: disableBlockStreaming ?? false,
+        disableBlockStreaming: resolvedDisableBlockStreaming,
       },
     });
 

@@ -311,6 +311,140 @@ describe("mqttPlugin", () => {
       await startPromise;
     });
 
+    it("should forward an empty final reply so downstream can observe the final kind", async () => {
+      mockDispatchReply.mockImplementationOnce(async ({ dispatcherOptions }: any) => {
+        await dispatcherOptions.deliver({ text: "partial reply" }, { kind: "block" });
+        await dispatcherOptions.deliver({ text: "" }, { kind: "final" });
+      });
+
+      const { controller, startPromise } = await startAccount();
+
+      const mock = getMockClient();
+      mock?.simulateMessage(
+        "openclaw/inbound",
+        JSON.stringify({
+          text: "ping",
+          senderId: "pg-test",
+          sessionId: "sess-123",
+        })
+      );
+      await flushAsync();
+
+      const published = (mock?.published ?? []).map((entry) => JSON.parse(String(entry.message)));
+      expect(published).toHaveLength(2);
+      expect(published[0]).toMatchObject({
+        text: "partial reply",
+        kind: "block",
+        sessionId: "sess-123",
+      });
+      expect(published[1]).toMatchObject({
+        text: "",
+        kind: "final",
+        sessionId: "sess-123",
+      });
+
+      controller.abort();
+      await startPromise;
+    });
+
+    it("should use per-message disableBlockStreaming override for the current request only", async () => {
+      const { controller, startPromise } = await startAccount();
+
+      const mock = getMockClient();
+      mock?.simulateMessage(
+        "openclaw/inbound",
+        JSON.stringify({
+          text: "ping",
+          senderId: "pg-test",
+          disableBlockStreaming: true,
+        })
+      );
+      await flushAsync();
+
+      const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
+      expect(lastCall?.replyOptions?.disableBlockStreaming).toBe(true);
+
+      controller.abort();
+      await startPromise;
+    });
+
+    it("should fall back to account disableBlockStreaming when message override is absent", async () => {
+      const cfg = {
+        channels: {
+          "mqtt-channel": {
+            accounts: {
+              default: {
+                brokerUrl: "mqtt://localhost:1883",
+                topics: {
+                  inbound: "openclaw/inbound",
+                  outbound: "openclaw/outbound",
+                },
+                qos: 1 as const,
+                disableBlockStreaming: true,
+              },
+            },
+          },
+        },
+      };
+
+      const { controller, startPromise } = await startAccount(cfg);
+
+      const mock = getMockClient();
+      mock?.simulateMessage(
+        "openclaw/inbound",
+        JSON.stringify({
+          text: "ping",
+          senderId: "pg-test",
+        })
+      );
+      await flushAsync();
+
+      const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
+      expect(lastCall?.replyOptions?.disableBlockStreaming).toBe(true);
+
+      controller.abort();
+      await startPromise;
+    });
+
+    it("should allow message disableBlockStreaming=false to override account default", async () => {
+      const cfg = {
+        channels: {
+          "mqtt-channel": {
+            accounts: {
+              default: {
+                brokerUrl: "mqtt://localhost:1883",
+                topics: {
+                  inbound: "openclaw/inbound",
+                  outbound: "openclaw/outbound",
+                },
+                qos: 1 as const,
+                disableBlockStreaming: true,
+              },
+            },
+          },
+        },
+      };
+
+      const { controller, startPromise } = await startAccount(cfg);
+
+      const mock = getMockClient();
+      mock?.simulateMessage(
+        "openclaw/inbound",
+        JSON.stringify({
+          text: "ping",
+          senderId: "pg-test",
+          disableBlockStreaming: false,
+        })
+      );
+      await flushAsync();
+
+      const lastCall = mockDispatchReply.mock.calls.at(-1)?.[0];
+      expect(lastCall?.replyOptions?.disableBlockStreaming).toBe(false);
+
+      controller.abort();
+      await startPromise;
+    });
+
     it("should stringify numeric sessionId values", async () => {
       const { controller, startPromise } = await startAccount();
 

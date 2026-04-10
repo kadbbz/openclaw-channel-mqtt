@@ -127,6 +127,19 @@ Example inbound JSON:
 {"senderId":"conn-test2","text":"What is your agent name?","sessionId":"conn-test2"}
 ```
 
+Per-message block streaming override:
+
+```json
+{"senderId":"conn-test2","text":"Give me the final answer only","sessionId":"conn-test2","disableBlockStreaming":true}
+```
+
+Notes:
+
+- `disableBlockStreaming` only affects the current MQTT request.
+- When omitted, the plugin uses the account-level `disableBlockStreaming` value from config.
+- `true` forces this request down the non-block-streaming path, so OpenClaw can emit `final` replies for that request.
+- `false` explicitly allows block streaming for that request, even if the account default disables it.
+
 ### Sending messages (outbound)
 
 Agent replies are published to that account's `outbound` topic as JSON:
@@ -157,7 +170,10 @@ Real example reply:
 
 Notes:
 
+- The plugin forwards OpenClaw's outbound `kind` as-is. It does not rewrite `block` to `final` or vice versa.
 - `kind` may be `block` during block streaming or `final` for the final reply chunk.
+- If the inbound message sets `disableBlockStreaming: true`, that request asks OpenClaw to avoid block streaming so it can produce `final` replies for that request.
+- If the inbound message omits `disableBlockStreaming`, outbound `kind` behavior follows the account-level `disableBlockStreaming` setting from config.
 - `sessionId` is echoed only when the inbound JSON includes it.
 - Numeric inbound `sessionId` values are normalized to strings in outbound JSON.
 - `outbound.sendText()` publishes the same JSON envelope format and will also include `sessionId` when OpenClaw supplies `threadId` otherwise return -1.

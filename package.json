@@ -1,6 +1,6 @@
 {
   "name": "@kadbbz/mqtt-channel",
-  "version": "2.0.7",
+  "version": "2.1.0",
   "description": "MQTT channel plugin for OpenClaw - bidirectional messaging via MQTT brokers",
   "type": "module",
   "main": "dist/index.js",
