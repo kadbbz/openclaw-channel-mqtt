@@ -32,6 +32,30 @@ function normalizeDisableBlockStreaming(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
+function resolveDiagnosticLogger(log?: any, deps?: any): any {
+  if (log) {
+    return log;
+  }
+
+  if (deps?.log) {
+    return deps.log;
+  }
+
+  if (deps?.runtime) {
+    return deps.runtime;
+  }
+
+  try {
+    return getMqttRuntime();
+  } catch {
+    return undefined;
+  }
+}
+
+function logDiagnosticInfo(log: any, message: string) {
+  log?.info?.(message);
+}
+
 function buildOutboundEnvelope(params: {
   text: string;
   kind?: string;
@@ -98,12 +122,14 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
       accountId,
       account,
       threadId,
+      deps,
     }: {
       text: string;
       cfg: any;
       accountId?: string;
       account?: any;
       threadId?: string | number | null;
+      deps?: any;
     }) {
       const resolved =
         account?.config && account?.brokerUrl
@@ -128,11 +154,20 @@ export const mqttPlugin: ChannelPlugin<MqttCoreConfig> = {
       try {
         const topic = mqtt.topics?.outbound ?? "openclaw/outbound";
         const sessionId = normalizeSessionId(threadId) ?? DEFAULT_SESSION_ID;
-        await mqttClient.publish(
-          topic,
-          buildOutboundEnvelope({ text, sessionId }),
-          mqtt.qos
+        const log = resolveDiagnosticLogger(undefined, deps);
+        const outboundKind = "final";
+        const outboundPayload = buildOutboundEnvelope({ text, sessionId });
+
+        logDiagnosticInfo(
+          log,
+          `MQTT outbound request from OpenClaw account=${resolved.accountId} topic=${topic} sessionId=${sessionId} kind=${outboundKind} source=plugin.outbound.sendText`
         );
+        logDiagnosticInfo(
+          log,
+          `MQTT writing outbound topic=${topic} sessionId=${sessionId} kind=${outboundKind} source=plugin.outbound.sendText`
+        );
+
+        await mqttClient.publish(topic, outboundPayload, mqtt.qos);
         return { ok: true };
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err);
@@ -327,8 +362,8 @@ async function handleInboundMessage(opts: {
       SenderName: senderId,
       SenderId: senderId,
       MessageThreadId: sessionId,
-      Provider: "mqtt",
-      Surface: "mqtt",
+      Provider: "mqtt-channel",
+      Surface: "mqtt-channel",
       MessageSid: `mqtt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       Timestamp: Date.now(),
       OriginatingChannel: "mqtt-channel",
@@ -396,11 +431,11 @@ async function handleInboundMessage(opts: {
                 sessionId: outboundSessionId,
               });
               log?.info?.(
-                `MQTT publishing reply kind=${info.kind} sessionId=${outboundSessionId} topic=${outboundTopic}`
+                `MQTT writing outbound topic=${outboundTopic} sessionId=${outboundSessionId} kind=${info.kind} source=reply.dispatcher.deliver`
               );
               await mqttClient.publish(outboundTopic, outboundPayload, qos as 0 | 1 | 2);
               log?.info?.(
-                `MQTT: sent reply to ${outboundTopic} kind=${info.kind} sessionId=${outboundSessionId}`
+                `MQTT: sent reply to ${outboundTopic} sessionId=${outboundSessionId} kind=${info.kind} source=reply.dispatcher.deliver`
               );
             } catch (err) {
               log?.error?.(`MQTT: failed to send reply: ${err}`);

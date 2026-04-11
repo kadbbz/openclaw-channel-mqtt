@@ -41,6 +41,9 @@ describe("mqttPlugin", () => {
   );
 
   const mockRuntime = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
     channel: {
       routing: {
         resolveAgentRoute: mockResolveAgentRoute,
@@ -637,6 +640,16 @@ describe("mqttPlugin", () => {
       expect(payload.text).toBe("Hello from OpenClaw");
       expect(payload.kind).toBe("final");
       expect(typeof payload.ts).toBe("number");
+      expect(mockRuntime.info).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "MQTT outbound request from OpenClaw account=default topic=openclaw/outbound sessionId=-1 kind=final source=plugin.outbound.sendText"
+        )
+      );
+      expect(mockRuntime.info).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "MQTT writing outbound topic=openclaw/outbound sessionId=-1 kind=final source=plugin.outbound.sendText"
+        )
+      );
 
       controller.abort();
       await startPromise;

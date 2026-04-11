@@ -4,7 +4,7 @@ import { z } from "zod";
  * MQTT Configuration Schema
  *
  * Values can come from:
- * 1. ~/.openclaw/openclaw.json (channels.mqtt.*)
+ * 1. ~/.openclaw/openclaw.json (channels["mqtt-channel"].*)
  * 2. Environment variables (MQTT_*)
  *
  * Environment variables take precedence for secrets.
