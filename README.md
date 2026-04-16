@@ -4,6 +4,8 @@
 
 MQTT channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) — bidirectional messaging via MQTT brokers.
 
+Compatibility note: this package keeps the legacy runtime entry for older OpenClaw versions and also ships setup/configured-state metadata for the newer manifest-driven loader.
+
 ## Features
 
 - 🔌 **Bidirectional messaging** — subscribe and publish to MQTT topics

@@ -42,6 +42,59 @@ export const mqttChannelConfigSchema = z
   })
   .passthrough();
 
+export const mqttAccountConfigJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    enabled: { type: "boolean" },
+    brokerUrl: { type: "string" },
+    username: { type: "string" },
+    password: { type: "string" },
+    clientId: { type: "string" },
+    topics: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        inbound: { type: "string" },
+        outbound: { type: "string" },
+      },
+    },
+    qos: { enum: [0, 1, 2] },
+    disableBlockStreaming: { type: "boolean" },
+    tls: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        enabled: { type: "boolean" },
+        rejectUnauthorized: { type: "boolean" },
+        ca: { type: "string" },
+      },
+    },
+  },
+} as const;
+
+export const mqttChannelConfigJsonSchema = {
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      enabled: { type: "boolean" },
+      accounts: {
+        type: "object",
+        additionalProperties: mqttAccountConfigJsonSchema,
+      },
+      brokerUrl: { type: "string" },
+      username: { type: "string" },
+      password: { type: "string" },
+      clientId: { type: "string" },
+      topics: mqttAccountConfigJsonSchema.properties.topics,
+      qos: mqttAccountConfigJsonSchema.properties.qos,
+      disableBlockStreaming: { type: "boolean" },
+      tls: mqttAccountConfigJsonSchema.properties.tls,
+    },
+  },
+} as const;
+
 export type MqttAccountConfig = z.infer<typeof mqttAccountConfigSchema>;
 export type MqttChannelConfig = z.infer<typeof mqttChannelConfigSchema>;
 export type MqttConfig = MqttAccountConfig;

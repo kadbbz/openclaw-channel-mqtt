@@ -2,7 +2,12 @@
  * MQTT Channel Onboarding Adapter
  * Provides interactive setup via `openclaw configure channels`
  */
-import { getMqttAccounts, listMqttAccountIds } from "./channel-config.js";
+import {
+  getMqttAccounts,
+  getMqttConfiguredState,
+  hasConfiguredMqttEnv,
+  listMqttAccountIds,
+} from "./channel-config.js";
 
 const channel = "mqtt-channel";
 
@@ -89,7 +94,9 @@ export const mqttOnboardingAdapter = {
   getStatus: async ({ cfg }: { cfg: MqttConfig }): Promise<OnboardingStatus> => {
     const mqtt = cfg.channels?.["mqtt-channel"];
     const accountIds = listMqttAccountIds(cfg);
-    const configured = accountIds.length > 0 && mqtt?.enabled !== false;
+    const configured =
+      getMqttConfiguredState(cfg) === "configured" && mqtt?.enabled !== false;
+    const usesEnvConfig = hasConfiguredMqttEnv();
     const brokerUrls = accountIds
       .map((accountId) => getMqttAccounts(cfg)[accountId]?.brokerUrl)
       .filter((url): url is string => Boolean(url));
@@ -99,7 +106,7 @@ export const mqttOnboardingAdapter = {
       configured,
       statusLines: [
         configured
-          ? `MQTT: configured (${accountIds.length} account${accountIds.length === 1 ? "" : "s"}${brokerUrls[0] ? `, first: ${brokerUrls[0]}` : ""})`
+          ? `MQTT: configured (${accountIds.length} account${accountIds.length === 1 ? "" : "s"}${brokerUrls[0] ? `, first: ${brokerUrls[0]}` : usesEnvConfig ? ", via MQTT_BROKER_URL" : ""})`
           : "MQTT: not configured",
       ],
       selectionHint: configured

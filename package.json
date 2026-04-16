@@ -1,6 +1,6 @@
 {
   "name": "@kadbbz/mqtt-channel",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "MQTT channel plugin for OpenClaw - bidirectional messaging via MQTT brokers",
   "type": "module",
   "main": "dist/index.js",
@@ -32,6 +32,7 @@
     "extensions": [
       "./dist/index.js"
     ],
+    "setupEntry": "./dist/setup-entry.js",
     "channel": {
       "id": "mqtt-channel",
       "label": "MQTT Channel",
@@ -39,7 +40,8 @@
       "docsPath": "/channels/mqtt-channel",
       "docsLabel": "mqtt-channel",
       "blurb": "Bidirectional messaging via MQTT brokers (Mosquitto, EMQX, etc.)",
-      "order": 80
+      "order": 80,
+      "configuredState": "./dist/configured-state.js"
     },
     "install": {
       "npmSpec": "@kadbbz/mqtt-channel",

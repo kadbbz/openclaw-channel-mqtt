@@ -1,4 +1,5 @@
 import type { MqttAccountConfig, MqttChannelConfig } from "./config-schema.js";
+import { ENV_VARS } from "./env.js";
 
 const ACCOUNT_KEYS = [
   "enabled",
@@ -72,7 +73,26 @@ export function getMqttAccounts(cfg: any): Record<string, Partial<MqttAccountCon
   }
 
   const legacyConfig = extractLegacyAccountConfig(channelConfig);
-  return legacyConfig ? { default: legacyConfig } : {};
+  if (legacyConfig) {
+    return { default: legacyConfig };
+  }
+
+  const envAccount = getEnvBackedDefaultAccount();
+  return envAccount ? { default: envAccount } : {};
+}
+
+export function hasConfiguredMqttAccount(cfg: any): boolean {
+  return listMqttAccountIds(cfg).length > 0;
+}
+
+export function hasConfiguredMqttEnv(): boolean {
+  return Boolean(process.env[ENV_VARS.BROKER_URL]?.trim());
+}
+
+export function getMqttConfiguredState(cfg: any): "configured" | "unconfigured" {
+  return hasConfiguredMqttAccount(cfg) || hasConfiguredMqttEnv()
+    ? "configured"
+    : "unconfigured";
 }
 
 function extractLegacyAccountConfig(
@@ -94,4 +114,33 @@ function extractLegacyAccountConfig(
 
 function hasLegacyAccountConfig(channelConfig: RawMqttChannelConfig): boolean {
   return ACCOUNT_KEYS.some((key) => channelConfig[key] !== undefined);
+}
+
+function getEnvBackedDefaultAccount(): Partial<MqttAccountConfig> | undefined {
+  const brokerUrl = process.env[ENV_VARS.BROKER_URL]?.trim();
+  if (!brokerUrl) {
+    return undefined;
+  }
+
+  const username = process.env[ENV_VARS.USERNAME]?.trim();
+  const password = process.env[ENV_VARS.PASSWORD];
+  const clientId = process.env[ENV_VARS.CLIENT_ID]?.trim();
+  const ca = process.env[ENV_VARS.CA_PATH]?.trim();
+
+  return {
+    enabled: true,
+    brokerUrl,
+    ...(username ? { username } : {}),
+    ...(password ? { password } : {}),
+    ...(clientId ? { clientId } : {}),
+    ...(ca
+      ? {
+          tls: {
+            enabled: brokerUrl.startsWith("mqtts://"),
+            rejectUnauthorized: true,
+            ca,
+          },
+        }
+      : {}),
+  };
 }

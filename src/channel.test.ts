@@ -94,6 +94,11 @@ describe("mqttPlugin", () => {
   beforeEach(() => {
     resetMock();
     vi.clearAllMocks();
+    delete process.env.MQTT_BROKER_URL;
+    delete process.env.MQTT_USERNAME;
+    delete process.env.MQTT_PASSWORD;
+    delete process.env.MQTT_CLIENT_ID;
+    delete process.env.MQTT_CA_PATH;
     setMqttRuntime(mockRuntime as any);
   });
 
@@ -126,6 +131,17 @@ describe("mqttPlugin", () => {
     it("should return empty when not configured", () => {
       const ids = mqttPlugin.config.listAccountIds({} as any);
       expect(ids).toEqual([]);
+    });
+
+    it("should synthesize a default account from MQTT_BROKER_URL", () => {
+      process.env.MQTT_BROKER_URL = "mqtt://env-broker:1883";
+
+      const ids = mqttPlugin.config.listAccountIds({} as any);
+      const account = mqttPlugin.config.resolveAccount({} as any, "default");
+
+      expect(ids).toEqual(["default"]);
+      expect(account.accountId).toBe("default");
+      expect(account.brokerUrl).toBe("mqtt://env-broker:1883");
     });
 
     it("should list multiple configured accounts", () => {
