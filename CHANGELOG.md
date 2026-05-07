@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-05-07
+
+### Changed
+- Upgrade the plugin to the OpenClaw `2026.5.x` channel SDK entrypoint helpers
+- Update package compatibility metadata for the current OpenClaw SDK line
+
+### Improved
+- Remove the local `openclaw/plugin-sdk` shim and rely on official SDK typings
+- Share MQTT account config assembly between setup adapter and interactive onboarding
+- Keep backward-compatible outbound result fields while matching newer host expectations
+- Add manifest `channelConfigs` metadata so OpenClaw can validate `channels.mqtt-channel` before runtime loads
+
 ## [2.0.6] - 2026-03-27
 
 ### Fixed
@@ -108,7 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Package now ships pre-built JS files (consumers no longer need to compile)
 - Added `files` field to package.json for clean npm publishing
-- Added type declarations for openclaw/plugin-sdk (SDK doesn't ship .d.ts yet)
+- Added local type declarations for `openclaw/plugin-sdk` to support older SDK releases
 - Fixed implicit `any` type errors in channel.ts
 
 ### Changed

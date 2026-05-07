@@ -1,18 +1,16 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import { defineChannelPluginEntry } from "openclaw/plugin-sdk/channel-core";
 
 import { mqttPlugin } from "./src/channel.js";
 import { setMqttRuntime } from "./src/runtime.js";
+import { mqttChannelConfigJsonSchema } from "./src/config-schema.js";
 
-const plugin = {
+const plugin = defineChannelPluginEntry({
   id: "mqtt-channel",
   name: "MQTT Channel",
   description: "MQTT channel plugin for IoT and home automation integration.",
-  configSchema: emptyPluginConfigSchema(),
-  register(api: OpenClawPluginApi) {
-    setMqttRuntime(api.runtime);
-    api.registerChannel({ plugin: mqttPlugin });
-  },
-};
+  plugin: mqttPlugin,
+  configSchema: mqttChannelConfigJsonSchema,
+  setRuntime: setMqttRuntime,
+});
 
 export default plugin;

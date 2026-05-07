@@ -1,20 +1,16 @@
 import type { ChannelPlugin } from "openclaw/plugin-sdk";
 
 import { mqttChannelConfigJsonSchema } from "./config-schema.js";
-import type { MqttCoreConfig } from "./types.js";
 import { mqttOnboardingAdapter } from "./onboarding.js";
 import {
   listMqttAccountIds,
+  type ResolvedMqttAccount,
   resolveDefaultMqttAccountId,
   resolveMqttAccount,
 } from "./channel-config.js";
+import { applyMqttSetupAccountConfig, normalizeMqttAccountId } from "./setup-config.js";
 
-function normalizeMqttAccountId(accountId?: string | null): string {
-  const trimmed = accountId?.trim() ?? "";
-  return trimmed || "default";
-}
-
-export const mqttChannelBase: Partial<ChannelPlugin<MqttCoreConfig>> = {
+export const mqttChannelBase: Partial<ChannelPlugin<ResolvedMqttAccount>> = {
   id: "mqtt-channel",
 
   meta: {
@@ -28,10 +24,13 @@ export const mqttChannelBase: Partial<ChannelPlugin<MqttCoreConfig>> = {
 
   capabilities: {
     chatTypes: ["direct"],
+    media: false,
+    reactions: false,
+    threads: false,
     supportsMedia: false,
     supportsReactions: false,
     supportsThreads: false,
-  },
+  } as any,
 
   configSchema: mqttChannelConfigJsonSchema,
 
@@ -52,10 +51,11 @@ export const mqttChannelBase: Partial<ChannelPlugin<MqttCoreConfig>> = {
     isConfigured: (account: any) => Boolean(account.brokerUrl),
   },
 
-  onboarding: mqttOnboardingAdapter,
+  setupWizard: mqttOnboardingAdapter as any,
 
   setup: {
-    resolveAccountId: ({ accountId }: { accountId?: string | null }) =>
-      normalizeMqttAccountId(accountId),
+    resolveAccountId: ({ accountId }: { accountId?: string | null }) => normalizeMqttAccountId(accountId),
+    applyAccountConfig: ({ cfg, accountId, input }: { cfg: any; accountId: string; input: Record<string, unknown> }) =>
+      applyMqttSetupAccountConfig({ cfg, accountId, input }),
   },
 };

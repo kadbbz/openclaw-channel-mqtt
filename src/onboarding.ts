@@ -2,54 +2,20 @@
  * MQTT Channel Onboarding Adapter
  * Provides interactive setup via `openclaw configure channels`
  */
+import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
+
 import {
   getMqttAccounts,
   getMqttConfiguredState,
   hasConfiguredMqttEnv,
   listMqttAccountIds,
 } from "./channel-config.js";
+import { DEFAULT_INBOUND_TOPIC, DEFAULT_OUTBOUND_TOPIC } from "./config-schema.js";
+import { applyMqttSetupAccountConfig } from "./setup-config.js";
 
 const channel = "mqtt-channel";
 
-interface MqttConfig {
-  channels?: {
-    "mqtt-channel"?: {
-      enabled?: boolean;
-      accounts?: Record<
-        string,
-        {
-          enabled?: boolean;
-          brokerUrl?: string;
-          username?: string;
-          password?: string;
-          disableBlockStreaming?: boolean;
-          topics?: {
-            inbound?: string;
-            outbound?: string;
-          };
-          tls?: {
-            enabled?: boolean;
-            rejectUnauthorized?: boolean;
-          };
-          qos?: 0 | 1 | 2;
-        }
-      >;
-      brokerUrl?: string;
-      username?: string;
-      password?: string;
-      disableBlockStreaming?: boolean;
-      topics?: {
-        inbound?: string;
-        outbound?: string;
-      };
-      tls?: {
-        enabled?: boolean;
-        rejectUnauthorized?: boolean;
-      };
-      qos?: 0 | 1 | 2;
-    };
-  };
-}
+type MqttConfig = OpenClawConfig;
 
 interface Prompter {
   text(opts: {
@@ -212,16 +178,16 @@ export const mqttOnboardingAdapter = {
     const inboundTopic = String(
       await prompter.text({
         message: "Inbound topic (messages to OpenClaw)",
-        placeholder: "openclaw/inbound",
-        initialValue: existingAccount?.topics?.inbound || "openclaw/inbound",
+        placeholder: DEFAULT_INBOUND_TOPIC,
+        initialValue: existingAccount?.topics?.inbound || DEFAULT_INBOUND_TOPIC,
       })
     ).trim();
 
     const outboundTopic = String(
       await prompter.text({
         message: "Outbound topic (messages from OpenClaw)",
-        placeholder: "openclaw/outbound",
-        initialValue: existingAccount?.topics?.outbound || "openclaw/outbound",
+        placeholder: DEFAULT_OUTBOUND_TOPIC,
+        initialValue: existingAccount?.topics?.outbound || DEFAULT_OUTBOUND_TOPIC,
       })
     ).trim();
 
@@ -237,31 +203,20 @@ export const mqttOnboardingAdapter = {
     })) as 0 | 1 | 2;
 
     // Build config
-    next = {
-      ...next,
-      channels: {
-        ...next.channels,
-        "mqtt-channel": {
-          ...cfg.channels?.["mqtt-channel"],
-          enabled: true,
-          accounts: {
-            ...cfg.channels?.["mqtt-channel"]?.accounts,
-            default: {
-              enabled: true,
-              brokerUrl,
-              ...(username && { username }),
-              ...(password && { password }),
-              ...(tls && { tls }),
-              topics: {
-                inbound: inboundTopic,
-                outbound: outboundTopic,
-              },
-              qos,
-            },
-          },
-        },
+    next = applyMqttSetupAccountConfig({
+      cfg: next as any,
+      accountId: "default",
+      input: {
+        brokerUrl,
+        username,
+        password,
+        inboundTopic,
+        outboundTopic,
+        qos,
+        tlsEnabled: tls?.enabled,
+        rejectUnauthorized: tls?.rejectUnauthorized,
       },
-    };
+    });
 
     return { cfg: next, accountId: "default" };
   },

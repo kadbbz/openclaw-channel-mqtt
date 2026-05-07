@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+export const DEFAULT_INBOUND_TOPIC = "openclaw/inbound";
+export const DEFAULT_OUTBOUND_TOPIC = "openclaw/outbound";
+export const DEFAULT_QOS = 1 as const;
+export const DEFAULT_DISABLE_BLOCK_STREAMING = false;
+
 /**
  * MQTT Configuration Schema
  *
@@ -20,12 +25,12 @@ export const mqttAccountConfigSchema = z.object({
   clientId: z.string().optional().describe("MQTT client ID"),
   topics: z
     .object({
-      inbound: z.string().default("openclaw/inbound"),
-      outbound: z.string().default("openclaw/outbound"),
+      inbound: z.string().default(DEFAULT_INBOUND_TOPIC),
+      outbound: z.string().default(DEFAULT_OUTBOUND_TOPIC),
     })
     .default({}),
-  qos: z.union([z.literal(0), z.literal(1), z.literal(2)]).default(1),
-  disableBlockStreaming: z.boolean().default(false),
+  qos: z.union([z.literal(0), z.literal(1), z.literal(2)]).default(DEFAULT_QOS),
+  disableBlockStreaming: z.boolean().default(DEFAULT_DISABLE_BLOCK_STREAMING),
   tls: z
     .object({
       enabled: z.boolean().default(false),
@@ -101,10 +106,10 @@ export type MqttConfig = MqttAccountConfig;
 
 export const defaultConfig: Partial<MqttAccountConfig> = {
   topics: {
-    inbound: "openclaw/inbound",
-    outbound: "openclaw/outbound",
+    inbound: DEFAULT_INBOUND_TOPIC,
+    outbound: DEFAULT_OUTBOUND_TOPIC,
   },
-  qos: 1,
-  disableBlockStreaming: false,
+  qos: DEFAULT_QOS,
+  disableBlockStreaming: DEFAULT_DISABLE_BLOCK_STREAMING,
   enabled: true,
 };

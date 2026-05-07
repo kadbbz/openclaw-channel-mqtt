@@ -4,7 +4,7 @@
 
 MQTT channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) — bidirectional messaging via MQTT brokers.
 
-Compatibility note: this package keeps the legacy runtime entry for older OpenClaw versions and also ships setup/configured-state metadata for the newer manifest-driven loader.
+Compatibility note: current releases target the OpenClaw `2026.5.x` channel SDK and ship the newer channel/setup entrypoints plus configured-state metadata.
 
 ## Features
 
@@ -98,8 +98,6 @@ Then restart the gateway process:
 ```bash
 systemctl restart openclaw
 ```
-
-If " Cannot find module 'openclaw/plugin-sdk'" occurred, navigate to your OpenClaw extensions folder (often ~/.openclaw/extensions/mqtt-channel or /usr/lib/node_modules/openclaw/extensions/mqtt-channel), then run npm install inside that directory for walkround.
 
 ## Usage
 

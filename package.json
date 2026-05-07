@@ -1,6 +1,6 @@
 {
   "name": "@kadbbz/mqtt-channel",
-  "version": "2.2.0",
+  "version": "2.3.1",
   "description": "MQTT channel plugin for OpenClaw - bidirectional messaging via MQTT brokers",
   "type": "module",
   "main": "dist/index.js",
@@ -55,12 +55,12 @@
   },
   "devDependencies": {
     "@types/node": "22.13.1",
-    "openclaw": "^2026.1.30",
+    "openclaw": "^2026.5.6",
     "typescript": "5.7.3",
     "vitest": "2.1.9"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.1.0"
+    "openclaw": ">=2026.5.0"
   },
   "peerDependenciesMeta": {
     "openclaw": {

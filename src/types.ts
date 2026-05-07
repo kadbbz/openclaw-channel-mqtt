@@ -1,4 +1,4 @@
-import type { CoreConfig } from "openclaw/plugin-sdk";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 import type { MqttChannelConfig as MqttChannelSettings } from "./config-schema.js";
 
 export interface MqttGatewayConfig {
@@ -7,7 +7,7 @@ export interface MqttGatewayConfig {
   };
 }
 
-export type MqttCoreConfig = CoreConfig & MqttGatewayConfig;
+export type MqttCoreConfig = OpenClawConfig & MqttGatewayConfig;
 
 export interface MqttInboundMessage {
   topic: string;

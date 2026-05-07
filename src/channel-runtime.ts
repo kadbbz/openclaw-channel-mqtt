@@ -1,9 +1,8 @@
 import type { ChannelPlugin } from "openclaw/plugin-sdk";
 
-import type { MqttCoreConfig } from "./types.js";
 import { createMqttClient, MqttClientManager } from "./client.js";
 import { getMqttRuntime } from "./runtime.js";
-import { resolveMqttAccount } from "./channel-config.js";
+import { resolveMqttAccount, type ResolvedMqttAccount } from "./channel-config.js";
 
 // One MQTT client per configured account.
 const mqttClients = new Map<string, MqttClientManager>();
@@ -62,69 +61,54 @@ function buildOutboundEnvelope(params: {
   });
 }
 
-export const mqttChannelRuntime: Partial<ChannelPlugin<MqttCoreConfig>> = {
+export const mqttChannelRuntime: Partial<ChannelPlugin<ResolvedMqttAccount>> = {
   outbound: {
     deliveryMode: "direct",
 
-    async sendText({
-      text,
-      cfg,
-      accountId,
-      account,
-      threadId,
-      deps,
-    }: {
-      text: string;
-      cfg: any;
-      accountId?: string;
-      account?: any;
-      threadId?: string | number | null;
-      deps?: any;
-    }) {
+    async sendText({ text, cfg, accountId, threadId, deps }: any) {
       const resolved =
-        account?.config && account?.brokerUrl
-          ? {
-              accountId: accountId ?? account.accountId ?? "default",
-              enabled: account.enabled !== false,
-              brokerUrl: account.brokerUrl,
-              config: account.config,
-            }
-          : resolveMqttAccount(cfg, accountId ?? account?.accountId);
+        resolveMqttAccount(cfg, typeof accountId === "string" ? accountId : undefined);
 
       const mqtt = resolved.config;
       if (!mqtt?.brokerUrl) {
-        return { ok: false, error: "MQTT not configured" };
+        return { ok: false, error: "MQTT not configured" } as any;
       }
 
       const mqttClient = mqttClients.get(resolved.accountId);
       if (!mqttClient || !mqttClient.isConnected()) {
-        return { ok: false, error: "MQTT not connected" };
+        return { ok: false, error: "MQTT not connected" } as any;
       }
 
-      try {
-        const topic = mqtt.topics?.outbound ?? "openclaw/outbound";
-        const sessionId = normalizeSessionId(threadId) ?? DEFAULT_SESSION_ID;
-        const log = resolveDiagnosticLogger(undefined, deps);
-        const outboundKind = "final";
-        const outboundPayload = buildOutboundEnvelope({ text, sessionId });
+      const topic = mqtt.topics?.outbound ?? "openclaw/outbound";
+      const sessionId = normalizeSessionId(threadId) ?? DEFAULT_SESSION_ID;
+      const log = resolveDiagnosticLogger(undefined, deps);
+      const outboundKind = "final";
+      const outboundPayload = buildOutboundEnvelope({ text, sessionId });
 
-        logDiagnosticInfo(
-          log,
-          `MQTT outbound request from OpenClaw account=${resolved.accountId} topic=${topic} sessionId=${sessionId} kind=${outboundKind} source=plugin.outbound.sendText`
-        );
-        logDiagnosticInfo(
-          log,
-          `MQTT writing outbound topic=${topic} sessionId=${sessionId} kind=${outboundKind} source=plugin.outbound.sendText`
-        );
+      logDiagnosticInfo(
+        log,
+        `MQTT outbound request from OpenClaw account=${resolved.accountId} topic=${topic} sessionId=${sessionId} kind=${outboundKind} source=plugin.outbound.sendText`
+      );
+      logDiagnosticInfo(
+        log,
+        `MQTT writing outbound topic=${topic} sessionId=${sessionId} kind=${outboundKind} source=plugin.outbound.sendText`
+      );
 
-        await mqttClient.publish(topic, outboundPayload, mqtt.qos);
-        return { ok: true };
-      } catch (err) {
-        const error = err instanceof Error ? err.message : String(err);
-        return { ok: false, error };
-      }
+      await mqttClient.publish(topic, outboundPayload, mqtt.qos);
+      return {
+        ok: true,
+        channel: "mqtt-channel",
+        messageId: `mqtt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        timestamp: Date.now(),
+        meta: {
+          accountId: resolved.accountId,
+          topic,
+          sessionId,
+          kind: outboundKind,
+        },
+      } as any;
     },
-  },
+  } as any,
 
   gateway: {
     startAccount: async (ctx: any) => {
